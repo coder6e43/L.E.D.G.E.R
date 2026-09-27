@@ -1,0 +1,9 @@
+expense_id,user_id,cost_centre,category,amount,currency,date,description
+EXP-1001,U001,CC-TECH,Software,1200,INR,2026-09-05,Annual IDE license
+EXP-1002,U001,CC-TECH,Food,450,INR,2026-09-10,Team lunch
+EXP-1003,U002,CC-TECH,Travel,3200,INR,2026-09-12,Client visit cab fare
+EXP-1004,U003,CC-MARKETING,Marketing,5000,INR,2026-09-15,Ad campaign
+EXP-1005,U001,CC-TECH,Food,900,INR,2026-09-20,Client dinner
+EXP-1002,U001,CC-TECH,Food,450,INR,2026-09-10,Duplicate of EXP-1002
+EXP-1006,U002,CC-TECH,Snacks,300,INR,2026-09-22,Invalid category test
+EXP-1007,U003,CC-MARKETING,Marketing,700,INR,2026-13-40,Invalid date test
