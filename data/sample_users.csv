@@ -1,0 +1,4 @@
+user_id,name,email,password_hash,role,cost_centre
+U001,Shaurya Goel,shaurya@example.com,hashed_pw_1,Manager,CC-TECH
+U002,Shubham Sharma,shubham@example.com,hashed_pw_2,Manager,CC-TECH
+U003,Akanksha Bhardwaj,akanksha@example.com,hashed_pw_3,Employee,CC-MARKETING

@@ -1,0 +1,5 @@
+budget_id,cost_centre,category,amount,period_start,period_end
+BUD-001,CC-TECH,Food,5000,2026-09-01,2026-09-30
+BUD-002,CC-TECH,Travel,10000,2026-09-01,2026-09-30
+BUD-003,CC-TECH,Software,8000,2026-09-01,2026-09-30
+BUD-004,CC-MARKETING,Marketing,20000,2026-09-01,2026-09-30
