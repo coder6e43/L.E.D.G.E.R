@@ -97,3 +97,83 @@ Deterministic Calculation
 Audit
 ↓
 Frontend
+
+## Database Module (Divyapunj) — how to use it
+
+**Do not open your own sqlite3 connection.** Always import the shared one:
+
+```python
+from database.connection import get_connection
+
+with get_connection() as conn:
+    rows = conn.execute("SELECT * FROM expenses WHERE cost_centre = ?", ("CC-TECH",)).fetchall()
+    for row in rows:
+        print(row["expense_id"], row["amount"])  # row acts like a dict
+```
+
+This handles commit/rollback/close for you automatically — don't manage transactions yourself.
+
+### Tables available
+
+**`users`** — Shubham (Auth/RBAC) reads this
+| column | type | notes |
+|---|---|---|
+| user_id | TEXT (PK) | |
+| name | TEXT | |
+| email | TEXT | unique |
+| password_hash | TEXT | never store plaintext |
+| role | TEXT | `Manager` / `Employee` / `Admin` |
+| cost_centre | TEXT | the ONE authorized cost centre for this user |
+
+**`expenses`** — Shaurya (Calculation) reads this
+| column | type | notes |
+|---|---|---|
+| expense_id | TEXT (PK) | |
+| user_id | TEXT | FK → users.user_id |
+| cost_centre | TEXT | filter on this for RBAC scoping |
+| category | TEXT | one of 8 fixed categories (see ingestion.py `ALLOWED_CATEGORIES`) |
+| amount | REAL | always ≥ 0 |
+| currency | TEXT | INR / USD / EUR |
+| date | TEXT | ISO format `YYYY-MM-DD` |
+| description | TEXT | free text |
+
+**`budgets`** — Shaurya (Calculation) reads this
+| column | type | notes |
+|---|---|---|
+| budget_id | TEXT (PK) | |
+| cost_centre | TEXT | |
+| category | TEXT | |
+| amount | REAL | budget ceiling |
+| period_start / period_end | TEXT | ISO dates defining the budget period |
+
+### Example: Shaurya's calculation engine pattern
+
+```python
+from database.connection import get_connection
+
+def total_spent(cost_centre: str, category: str, date_start: str, date_end: str) -> float:
+    with get_connection() as conn:
+        row = conn.execute(
+            """SELECT SUM(amount) as total FROM expenses
+               WHERE cost_centre = ? AND category = ? AND date BETWEEN ? AND ?""",
+            (cost_centre, category, date_start, date_end),
+        ).fetchone()
+        return row["total"] or 0.0
+```
+
+### Example: Shubham's RBAC lookup pattern
+
+```python
+from database.connection import get_connection
+
+def get_user(user_id: str):
+    with get_connection() as conn:
+        row = conn.execute("SELECT * FROM users WHERE user_id = ?", (user_id,)).fetchone()
+        return dict(row) if row else None
+```
+
+### Rules
+- Never trust a `cost_centre` value coming from the frontend or the LLM — always resolve it server-side from `users.cost_centre` via this module.
+- The LLM must never write SQL directly against these tables; it only produces the structured JSON query (Niketan's job), which Shaurya's code turns into parameterized queries like above.
+- To reload/reset test data locally: delete `data/ledger.db` and run `python -m database.ingestion`.
+- Sample data covers 3 cost centres (CC-TECH, CC-MARKETING, CC-SALES), 2 months (Aug/Sept 2026), all 8 categories — enough to demo filters, sums, and budget-burn calculations.
