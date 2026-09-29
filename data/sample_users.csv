@@ -2,3 +2,7 @@ user_id,name,email,password_hash,role,cost_centre
 U001,Shaurya Goel,shaurya@example.com,hashed_pw_1,Manager,CC-TECH
 U002,Shubham Sharma,shubham@example.com,hashed_pw_2,Manager,CC-TECH
 U003,Akanksha Bhardwaj,akanksha@example.com,hashed_pw_3,Employee,CC-MARKETING
+U004,Niketan Sajwan,niketan@example.com,hashed_pw_4,Employee,CC-TECH
+U005,Divyapunj,divyapunj@example.com,hashed_pw_5,Admin,CC-TECH
+U006,Harshit Pratap,harshit@example.com,hashed_pw_6,Manager,CC-SALES
+U007,Ramesh Sisodia,ramesh@example.com,hashed_pw_7,Employee,CC-SALES

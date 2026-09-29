@@ -1,9 +1,42 @@
 expense_id,user_id,cost_centre,category,amount,currency,date,description
-EXP-1001,U001,CC-TECH,Software,1200,INR,2026-09-05,Annual IDE license
-EXP-1002,U001,CC-TECH,Food,450,INR,2026-09-10,Team lunch
-EXP-1003,U002,CC-TECH,Travel,3200,INR,2026-09-12,Client visit cab fare
-EXP-1004,U003,CC-MARKETING,Marketing,5000,INR,2026-09-15,Ad campaign
-EXP-1005,U001,CC-TECH,Food,900,INR,2026-09-20,Client dinner
-EXP-1002,U001,CC-TECH,Food,450,INR,2026-09-10,Duplicate of EXP-1002
-EXP-1006,U002,CC-TECH,Snacks,300,INR,2026-09-22,Invalid category test
-EXP-1007,U003,CC-MARKETING,Marketing,700,INR,2026-13-40,Invalid date test
+EXP-1001,U005,CC-TECH,Training,3737,INR,2026-08-05,Certification exam
+EXP-1002,U002,CC-TECH,Food,3383,INR,2026-08-06,Coffee run
+EXP-1003,U004,CC-TECH,Miscellaneous,2151,INR,2026-08-12,Misc reimbursement
+EXP-1004,U005,CC-TECH,Software,3480,INR,2026-08-24,Annual IDE license
+EXP-1005,U001,CC-TECH,Office Supplies,2882,INR,2026-08-08,Whiteboard markers
+EXP-1006,U005,CC-TECH,Miscellaneous,3155,INR,2026-08-26,Misc reimbursement
+EXP-1007,U003,CC-MARKETING,Miscellaneous,2405,INR,2026-08-11,Team event
+EXP-1008,U003,CC-MARKETING,Office Supplies,2624,INR,2026-08-02,Stationery
+EXP-1009,U003,CC-MARKETING,Software,419,INR,2026-08-08,Dev tools license
+EXP-1010,U003,CC-MARKETING,Miscellaneous,5896,INR,2026-08-22,Team event
+EXP-1011,U003,CC-MARKETING,Miscellaneous,4522,INR,2026-08-27,Misc reimbursement
+EXP-1012,U003,CC-MARKETING,Software,4048,INR,2026-08-03,Cloud hosting
+EXP-1013,U006,CC-SALES,Utilities,4550,INR,2026-08-04,Phone bill
+EXP-1014,U007,CC-SALES,Software,2288,INR,2026-08-05,Cloud hosting
+EXP-1015,U006,CC-SALES,Miscellaneous,1211,INR,2026-08-15,Team event
+EXP-1016,U007,CC-SALES,Utilities,1969,INR,2026-08-19,Electricity bill
+EXP-1017,U007,CC-SALES,Miscellaneous,3684,INR,2026-08-11,Misc reimbursement
+EXP-1018,U006,CC-SALES,Miscellaneous,1980,INR,2026-08-26,Team event
+EXP-1019,U004,CC-TECH,Office Supplies,3300,INR,2026-09-14,Printer cartridges
+EXP-1020,U002,CC-TECH,Miscellaneous,2637,INR,2026-09-04,Team event
+EXP-1021,U005,CC-TECH,Training,5734,INR,2026-09-15,Online course
+EXP-1022,U005,CC-TECH,Utilities,2418,INR,2026-09-19,Phone bill
+EXP-1023,U001,CC-TECH,Miscellaneous,1691,INR,2026-09-09,Team event
+EXP-1024,U004,CC-TECH,Miscellaneous,4291,INR,2026-09-11,Team event
+EXP-1025,U003,CC-MARKETING,Miscellaneous,4184,INR,2026-09-01,Team event
+EXP-1026,U003,CC-MARKETING,Miscellaneous,2374,INR,2026-09-19,Misc reimbursement
+EXP-1027,U003,CC-MARKETING,Training,3179,INR,2026-09-24,Workshop fee
+EXP-1028,U003,CC-MARKETING,Marketing,1029,INR,2026-09-11,Print materials
+EXP-1029,U003,CC-MARKETING,Software,2740,INR,2026-09-11,SaaS subscription
+EXP-1030,U003,CC-MARKETING,Software,5416,INR,2026-09-22,Cloud hosting
+EXP-1031,U006,CC-SALES,Food,4922,INR,2026-09-23,Client dinner
+EXP-1032,U007,CC-SALES,Office Supplies,2882,INR,2026-09-27,Stationery
+EXP-1033,U006,CC-SALES,Utilities,3129,INR,2026-09-21,Phone bill
+EXP-1034,U006,CC-SALES,Miscellaneous,4720,INR,2026-09-09,Misc reimbursement
+EXP-1035,U007,CC-SALES,Miscellaneous,1656,INR,2026-09-01,Team event
+EXP-1036,U006,CC-SALES,Miscellaneous,3151,INR,2026-09-08,Misc reimbursement
+EXP-1037,U001,CC-TECH,Food,500,INR,2026-09-10,Duplicate test
+EXP-1038,U001,CC-TECH,Food,500,INR,2026-09-10,Duplicate of above
+EXP-1039,U002,CC-TECH,Snacks,300,INR,2026-09-15,Invalid category test
+EXP-1040,U003,CC-MARKETING,Marketing,700,INR,2026-13-40,Invalid date test
+EXP-1041,U006,CC-SALES,Travel,-200,INR,2026-09-18,Negative amount test
