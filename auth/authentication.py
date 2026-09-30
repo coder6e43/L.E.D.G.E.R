@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import bcrypt
 
@@ -10,9 +10,10 @@ from database.connection import get_connection
 
 VALID_ROLES = frozenset({"Manager", "Employee", "Admin"})
 GENERIC_AUTHENTICATION_ERROR = "Invalid email or password."
+_AUTHENTICATED_USER_SEAL = object()
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, init=False)
 class AuthenticatedUser:
     """Safe authenticated identity; never contains a password or password hash."""
 
@@ -21,6 +22,26 @@ class AuthenticatedUser:
     email: str
     role: str
     cost_centre: str
+    _seal: object = field(repr=False, compare=False)
+
+    def __init__(self, *_args, **_kwargs) -> None:
+        raise TypeError("AuthenticatedUser instances are created by authentication only.")
+
+    @classmethod
+    def _from_database(cls, row) -> "AuthenticatedUser":
+        """Mint an identity from a verified database record."""
+        user = object.__new__(cls)
+        object.__setattr__(user, "user_id", row["user_id"])
+        object.__setattr__(user, "name", row["name"])
+        object.__setattr__(user, "email", row["email"])
+        object.__setattr__(user, "role", row["role"])
+        object.__setattr__(user, "cost_centre", row["cost_centre"])
+        object.__setattr__(user, "_seal", _AUTHENTICATED_USER_SEAL)
+        return user
+
+    def _is_trusted(self) -> bool:
+        """Whether this identity was minted by the authentication module."""
+        return getattr(self, "_seal", None) is _AUTHENTICATED_USER_SEAL
 
     def to_dict(self) -> dict[str, str]:
         """Return the public identity fields used by application integrations."""
@@ -86,13 +107,7 @@ def authenticate_user(email: str, password: str) -> AuthenticatedUser | None:
     if not password_matches or role not in VALID_ROLES:
         return None
 
-    return AuthenticatedUser(
-        user_id=row["user_id"],
-        name=row["name"],
-        email=row["email"],
-        role=role,
-        cost_centre=row["cost_centre"],
-    )
+    return AuthenticatedUser._from_database(row)
 
 
 def _verify_against_dummy(password_bytes: bytes) -> None:

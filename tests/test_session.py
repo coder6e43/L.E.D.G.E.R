@@ -12,7 +12,10 @@ def clear_session():
 
 
 def test_session_lifecycle():
-    user = AuthenticatedUser("U001", "Test", "test@example.com", "Employee", "CC-TECH")
+    user = AuthenticatedUser._from_database(
+        {"user_id": "U001", "name": "Test", "email": "test@example.com",
+         "role": "Employee", "cost_centre": "CC-TECH"}
+    )
     assert get_current_user() is None
     assert not is_authenticated()
     set_authenticated_user(user)

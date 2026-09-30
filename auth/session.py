@@ -11,7 +11,11 @@ _current_user: ContextVar[AuthenticatedUser | None] = ContextVar(
 
 def set_authenticated_user(user: AuthenticatedUser) -> None:
     """Set the server-authenticated identity for the current execution context."""
-    if not isinstance(user, AuthenticatedUser) or user.role not in VALID_ROLES:
+    if (
+        not isinstance(user, AuthenticatedUser)
+        or not user._is_trusted()
+        or user.role not in VALID_ROLES
+    ):
         raise TypeError("Only a valid AuthenticatedUser may be placed in session state.")
     _current_user.set(user)
 

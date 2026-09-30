@@ -23,9 +23,14 @@ def user_db(tmp_path, monkeypatch):
 
 def test_valid_credentials_return_safe_identity(user_db, caplog):
     user = authenticate_user("TEST@example.com", user_db)
-    assert user == AuthenticatedUser(
-        "U001", "Test User", "test@example.com", "Employee", "CC-TECH"
-    )
+    assert isinstance(user, AuthenticatedUser)
+    assert user.to_dict() == {
+        "user_id": "U001",
+        "name": "Test User",
+        "email": "test@example.com",
+        "role": "Employee",
+        "cost_centre": "CC-TECH",
+    }
     assert "password_hash" not in user.to_dict()
     assert user_db not in repr(user)
     assert user_db not in caplog.text
@@ -41,6 +46,11 @@ def test_invalid_credentials_fail_without_detail(user_db, email, password):
 
 def test_sql_injection_in_email_is_treated_as_data(user_db):
     assert authenticate_user("' OR 1=1 --", user_db) is None
+
+
+def test_authenticated_user_cannot_be_fabricated_from_request_fields():
+    with pytest.raises(TypeError):
+        AuthenticatedUser("U001", "Attacker", "x@example.com", "Admin", "CC-SALES")
 
 
 def test_sample_placeholder_hash_fails_closed(tmp_path, monkeypatch):

@@ -14,7 +14,10 @@ from auth.rbac import (
 
 @pytest.fixture
 def user():
-    return AuthenticatedUser("U001", "Test", "test@example.com", "Manager", "CC-TECH")
+    return AuthenticatedUser._from_database(
+        {"user_id": "U001", "name": "Test", "email": "test@example.com",
+         "role": "Manager", "cost_centre": "CC-TECH"}
+    )
 
 
 @pytest.mark.parametrize("role", ["Manager", "Employee", "Admin"])
@@ -52,4 +55,9 @@ def test_same_cost_centre_is_allowed(user):
 def test_frontend_role_or_scope_mapping_cannot_be_used_as_identity():
     with pytest.raises(AuthorizationError):
         get_authorized_cost_centre({"role": "Admin", "cost_centre": "CC-SALES"})
+
+
+def test_fabricated_authenticated_user_is_denied():
+    with pytest.raises(TypeError):
+        AuthenticatedUser("U001", "Attacker", "x@example.com", "Admin", "CC-SALES")
 
