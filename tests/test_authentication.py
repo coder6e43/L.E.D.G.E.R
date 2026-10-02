@@ -3,6 +3,7 @@ import pytest
 
 from auth.authentication import AuthenticatedUser, authenticate_user
 from database import connection
+from database.connection import get_connection
 from database.models import init_db
 
 
@@ -63,5 +64,18 @@ def test_sample_placeholder_hash_fails_closed(tmp_path, monkeypatch):
         )
     assert authenticate_user("demo@example.com", "anything") is None
 
+
+def test_updated_sample_user_accepts_documented_password(sample_database):
+    with get_connection() as conn:
+        row = conn.execute("SELECT email FROM users ORDER BY user_id LIMIT 1").fetchone()
+    user = authenticate_user(row["email"], "Password123!")
+    assert isinstance(user, AuthenticatedUser)
+    assert "password_hash" not in user.to_dict()
+
+
+def test_updated_sample_user_rejects_wrong_password(sample_database):
+    with get_connection() as conn:
+        row = conn.execute("SELECT email FROM users ORDER BY user_id LIMIT 1").fetchone()
+    assert authenticate_user(row["email"], "wrong password") is None
 
 

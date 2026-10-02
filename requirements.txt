@@ -1,2 +1,2 @@
 bcrypt>=4.1,<6
-
+pydantic>=2,<3
