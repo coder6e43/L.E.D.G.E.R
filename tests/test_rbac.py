@@ -77,3 +77,21 @@ def test_frontend_role_or_scope_mapping_cannot_be_used_as_identity():
 def test_fabricated_authenticated_user_is_denied():
     with pytest.raises(TypeError):
         AuthenticatedUser("U001", "Attacker", "x@example.com", "Admin", "CC-SALES")
+
+
+def test_missing_cost_centre_fails_closed():
+    user_without_scope = AuthenticatedUser._from_database(
+        {"user_id": "U002", "name": "Test", "email": "test@example.com",
+         "role": "Employee", "cost_centre": " "}
+    )
+    with pytest.raises(AuthorizationError):
+        get_authorized_scope(user_without_scope)
+
+
+def test_invalid_authenticated_role_fails_closed():
+    malformed_user = AuthenticatedUser._from_database(
+        {"user_id": "U003", "name": "Test", "email": "test@example.com",
+         "role": "Root", "cost_centre": "CC-TECH"}
+    )
+    with pytest.raises(AuthorizationError):
+        get_authorized_scope(malformed_user)

@@ -100,4 +100,7 @@ def get_authorized_scope(
 def _require_authenticated_user(user: AuthenticatedUser) -> None:
     if not isinstance(user, AuthenticatedUser) or not user._is_trusted():
         raise AuthorizationError("Authentication is required.")
-    validate_role(user.role)
+    try:
+        validate_role(user.role)
+    except ValueError:
+        raise AuthorizationError("The authenticated role is invalid.") from None

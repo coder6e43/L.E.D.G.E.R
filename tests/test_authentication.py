@@ -45,6 +45,12 @@ def test_invalid_credentials_fail_without_detail(user_db, email, password):
     assert authenticate_user(email, password) is None
 
 
+def test_malformed_credential_types_and_unicode_fail_safely(user_db):
+    assert authenticate_user(None, "password") is None
+    assert authenticate_user("test@example.com", None) is None
+    assert authenticate_user("test@example.com", "\ud800") is None
+
+
 def test_sql_injection_in_email_is_treated_as_data(user_db):
     assert authenticate_user("' OR 1=1 --", user_db) is None
 

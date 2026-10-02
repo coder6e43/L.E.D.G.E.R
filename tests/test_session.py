@@ -1,4 +1,5 @@
 import pytest
+from contextvars import Context
 
 from auth import get_current_user as package_get_current_user
 from auth import is_authenticated as package_is_authenticated
@@ -45,3 +46,13 @@ def test_package_exports_session_lifecycle():
     assert package_is_authenticated()
     package_logout()
     assert package_get_current_user() is None
+
+
+def test_authenticated_identity_isolated_from_a_fresh_execution_context():
+    user = AuthenticatedUser._from_database(
+        {"user_id": "U001", "name": "Test", "email": "test@example.com",
+         "role": "Employee", "cost_centre": "CC-TECH"}
+    )
+    set_authenticated_user(user)
+    assert get_current_user() is user
+    assert Context().run(get_current_user) is None
