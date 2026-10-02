@@ -36,6 +36,7 @@ def test_login_query_scope_and_audit_use_trusted_identity(sample_database):
         {
             "intent": "expense_count",
             "cost_centre": other_scope,
+            "role": "Admin",
             "password": "Password123!",
         }
     )
@@ -56,7 +57,9 @@ def test_login_query_scope_and_audit_use_trusted_identity(sample_database):
     record = get_recent(db_path=Path(sample_database["path"]).parent / "audit.db")[0]
     assert record["user_id"] == user.user_id
     assert record["scope"] == user.cost_centre
-    assert json.loads(record["parsed_json"])["authenticated_role"] == user.role
+    parsed_audit = json.loads(record["parsed_json"])
+    assert parsed_audit["authenticated_role"] == user.role
+    assert "role" not in parsed_audit["query"]
     assert "password" not in record["raw_prompt"].lower()
     assert "Password123!" not in record["raw_prompt"]
     assert json.loads(record["source_row_ids"]) == result["source_rows"]
