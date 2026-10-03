@@ -50,9 +50,6 @@ def test_final_permission_matrix_is_centralized_and_exact():
         "trend:view_cost_centre",
     }
     admin = manager | {
-        "expense:view_all",
-        "budget:view_all",
-        "trend:view_all",
         "audit:view",
         "report:export",
         "cost_centre:view_all",
@@ -103,8 +100,7 @@ def test_manager_can_view_only_assigned_cost_centre_operations():
         assert has_permission(manager, permission)
     for permission in (
         "audit:view", "report:export", "cost_centre:view_all", "user:manage",
-        "role:assign", "cost_centre:manage_access", "expense:view_all",
-        "budget:view_all", "trend:view_all",
+        "role:assign", "cost_centre:manage_access",
     ):
         assert not has_permission(manager, permission), permission
 

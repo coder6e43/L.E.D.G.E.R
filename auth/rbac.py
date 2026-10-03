@@ -13,11 +13,8 @@ PERMISSIONS = frozenset(
         "expense:view_own",
         "expense:create_own",
         "expense:view_cost_centre",
-        "expense:view_all",
         "budget:view_cost_centre",
-        "budget:view_all",
         "trend:view_cost_centre",
-        "trend:view_all",
         "audit:view",
         "report:export",
         "cost_centre:view_all",
@@ -35,9 +32,6 @@ _COST_CENTRE_PERMISSIONS = frozenset(
 )
 _ADMIN_PERMISSIONS = frozenset(
     {
-        "expense:view_all",
-        "budget:view_all",
-        "trend:view_all",
         "audit:view",
         "report:export",
         "cost_centre:view_all",

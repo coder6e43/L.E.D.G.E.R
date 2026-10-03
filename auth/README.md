@@ -45,9 +45,6 @@ false for undefined permissions and `require_permission` raises
 | `expense:view_cost_centre` | No | Yes | Yes |
 | `budget:view_cost_centre` | No | Yes | Yes |
 | `trend:view_cost_centre` | No | Yes | Yes |
-| `expense:view_all` | No | No | Yes |
-| `budget:view_all` | No | No | Yes |
-| `trend:view_all` | No | No | Yes |
 | `audit:view` | No | No | Yes |
 | `report:export` | No | No | Yes |
 | `cost_centre:view_all` | No | No | Yes |
