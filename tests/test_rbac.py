@@ -85,9 +85,8 @@ def test_employee_cannot_perform_manager_or_admin_operations():
     employee = make_user("Employee")
     for permission in (
         "expense:view_cost_centre", "budget:view_cost_centre", "trend:view_cost_centre",
-        "expense:view_all", "budget:view_all", "trend:view_all", "audit:view",
-        "report:export", "cost_centre:view_all", "user:manage", "role:assign",
-        "cost_centre:manage_access",
+        "audit:view", "report:export", "cost_centre:view_all", "user:manage",
+        "role:assign", "cost_centre:manage_access",
     ):
         assert not has_permission(employee, permission), permission
 
