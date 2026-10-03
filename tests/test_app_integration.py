@@ -8,9 +8,11 @@ from app import login_user, logout_user, run_authenticated_query
 from database.connection import get_connection
 
 
-def _sample_user_email():
+def _sample_user_email(role="Manager"):
     with get_connection() as conn:
-        return conn.execute("SELECT email FROM users ORDER BY user_id LIMIT 1").fetchone()["email"]
+        return conn.execute(
+            "SELECT email FROM users WHERE role = ? ORDER BY user_id LIMIT 1", (role,)
+        ).fetchone()["email"]
 
 
 def test_structured_query_requires_authenticated_session(sample_database):
@@ -72,3 +74,19 @@ def test_failed_login_clears_any_existing_identity(sample_database):
     assert login_user(_sample_user_email(), "Password123!") is not None
     assert login_user(_sample_user_email(), "wrong password") is None
     assert get_current_user() is None
+
+
+def test_app_fails_closed_when_engine_cannot_represent_employee_scope(sample_database):
+    user = login_user(_sample_user_email("Employee"), "Password123!")
+    assert user is not None
+    result = run_authenticated_query({"intent": "expense_count"})
+    assert result["status"] == "SCOPE_UNSUPPORTED"
+    assert result["result"] is None
+
+
+def test_app_fails_closed_when_engine_cannot_represent_admin_scope(sample_database):
+    user = login_user(_sample_user_email("Admin"), "Password123!")
+    assert user is not None
+    result = run_authenticated_query({"intent": "expense_count"})
+    assert result["status"] == "SCOPE_UNSUPPORTED"
+    assert result["result"] is None

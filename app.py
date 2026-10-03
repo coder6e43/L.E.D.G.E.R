@@ -15,7 +15,7 @@ from typing import Any
 
 from audit.logger import log_query
 from auth.authentication import AuthenticatedUser, authenticate_user
-from auth.rbac import get_authorized_cost_centre
+from auth.rbac import get_authorized_scope, has_permission
 from auth.session import (
     get_current_user,
     logout as clear_session,
@@ -51,7 +51,29 @@ def run_authenticated_query(query: Mapping[str, Any]) -> dict[str, Any]:
     if user is None:
         return _failure("ACCESS_DENIED", "Authentication is required.")
 
-    scope = get_authorized_cost_centre(user)
+    if not has_permission(user, "query:ask"):
+        return _failure("ACCESS_DENIED", "You are not authorized to ask financial queries.")
+
+    authorization = get_authorized_scope(user)
+    if authorization["scope_type"] != "cost_centre":
+        # The current calculation API accepts one cost centre only. Do not
+        # widen an employee's user scope or narrow an admin's org scope into
+        # an untrusted request-selected centre.
+        return _failure(
+            "SCOPE_UNSUPPORTED",
+            "The calculation integration cannot safely execute this authorization scope yet.",
+        )
+
+    intent = query.get("intent") if isinstance(query, Mapping) else None
+    required_permission = (
+        "budget:view_cost_centre"
+        if isinstance(intent, str) and intent in {"remaining_budget", "burn_rate"}
+        else "expense:view_cost_centre"
+    )
+    if not has_permission(user, required_permission):
+        return _failure("ACCESS_DENIED", "You are not authorized for this query operation.")
+
+    scope = authorization["cost_centre"]
     result = run_calculation(query, authorized_cost_centre=scope)
     safe_query = _safe_query_for_audit(query)
     result_status = result.get("status")
