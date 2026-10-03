@@ -13,62 +13,68 @@ comes from calculation/formulas.py. It never authenticates or authorizes a
 user -- it only accepts an already-authorized cost centre as a trusted input.
 
 --------------------------------------------------------------------------
-COMPATIBILITY NOTE (auth/ and query/ do not exist yet)
+COMPATIBILITY NOTE (auth/ is not implemented yet)
 --------------------------------------------------------------------------
-This module does NOT import from an `auth` or `query` package, because
-neither exists in the repository yet. Instead it exposes one plain entry
-point:
+This module does NOT import from an `auth` package, because it does not
+exist in the repository yet. It exposes one plain entry point:
 
     run_calculation(query: Mapping[str, Any], authorized_cost_centre: str) -> dict
 
-When auth/ and query/ are implemented, the caller (Streamlit UI or a small
-routing layer) is expected to:
-  1. Authenticate the user and resolve their authorized_cost_centre via the
-     future auth/rbac module.
-  2. Compile the natural-language question into the structured `query` dict
-     via the future query-compiler module.
-  3. Call run_calculation(query, authorized_cost_centre) with both.
+`query` is now produced by the Query Compiler (query/compiler.py,
+query/schema.py), which this module also does not import from -- it only
+reads plain fields off the `query` mapping it's handed, so it has no
+compile-time dependency on the compiler's internal types. `authorized_cost_centre`
+is still expected to come from the (future) auth/RBAC layer.
 
-engine.py never reads a cost-centre-shaped value out of `query` itself --
-`authorized_cost_centre` is a separate function argument, sourced only from
-the trusted caller, so nothing inside `query` can ever override it.
+engine.py never trusts a cost-centre-shaped value out of `query` for
+authorization -- see SECURITY below for how `query["user_scope"]` is
+handled.
 
 --------------------------------------------------------------------------
-STRUCTURED QUERY -- CONTRACT FIELDS vs ENGINE-LEVEL FIELDS
+STRUCTURED QUERY -- LATEST QUERY COMPILER CONTRACT
 --------------------------------------------------------------------------
-Fields defined by INTEGRATION_CONTRACT.md section 2/3:
-    intent        (str, required)  -- see SUPPORTED_INTENTS below
-    category      (str, optional)
-    date_start    (str "YYYY-MM-DD", optional)
-    date_end      (str "YYYY-MM-DD", optional)
+The Query Compiler's query object contains:
 
-Engine-level fields (NOT part of INTEGRATION_CONTRACT.md -- documented here
-as an implementation detail this engine currently relies on):
-    top_n         (int, optional)  -- required only by "top_transactions"
-    currency      (str, optional)  -- one of INR/USD/EUR; filters expenses,
-                                       never converts between currencies
-    expense_ids   (list[str], required only by "source_rows")
+    intent              (str, required)      -- see SUPPORTED_INTENTS below
+    user_scope           (str, optional)     -- see SECURITY below; NEVER
+                                                 used to filter the database
+    category              (str, optional)
+    date_range_start      (date, optional)   -- python datetime.date (or an
+                                                 already-formatted
+                                                 'YYYY-MM-DD' string)
+    date_range_end         (date, optional)  -- same as above
+    limit                   (int, optional)  -- used only by top_transactions
+    currency                 (str, optional) -- defaults to "INR" per the
+                                                 compiler schema; filters
+                                                 expenses, never converts
 
-The contract's own example query has no "cost_centre" field, and engine.py
-never looks for one -- the authorized cost centre always comes from the
-authorized_cost_centre argument.
+This supersedes the older field names this engine previously used
+(date_start/date_end/top_n/expense_ids); those are no longer read anywhere
+in this file.
 
 --------------------------------------------------------------------------
 SUPPORTED INTENTS
 --------------------------------------------------------------------------
-INTEGRATION_CONTRACT.md only shows "sum_expenses" as an example intent. The
-remaining names below were chosen (per the task's naming preference) to
-cover the other calculation-engine requirements. No other intents/financial
-calculations are supported.
+The Query Compiler uses exactly these six intent names:
 
     sum_expenses        -> calculate_total_expenses()
-    category_spending   -> calculate_category_spending()
-    expense_count        -> calculate_expense_count()
+    category_breakdown  -> calculate_category_spending()
     top_transactions     -> calculate_top_transactions()
-    remaining_budget      -> calculate_remaining_budget()
-    burn_rate             -> calculate_burn_rate()
-    source_rows           -> direct lookup of specific expense_ids (no formula
-                              math involved; pure evidence retrieval)
+    count_expenses        -> calculate_expense_count()
+    remaining_budget       -> calculate_remaining_budget()
+    source_lookup            -> direct filtered lookup of matching expense
+                                 records (no formula math involved; pure
+                                 evidence retrieval) -- NOTE: this intent no
+                                 longer takes an expense_ids list (the
+                                 compiler schema has none); it uses the same
+                                 filters as every other intent (category,
+                                 date_range_start/end, currency).
+
+burn_rate (-> calculate_burn_rate()) is kept as an additional, non-compiler
+engine capability: it is not one of the six names the compiler emits, but
+nothing stops a caller that already knows this engine's extra capability
+from using it, and it does not interfere with the six compiler intents.
+No other intents/financial calculations are supported.
 
 --------------------------------------------------------------------------
 RESULT CONTRACT
@@ -85,28 +91,31 @@ callers that only read result/currency/source_rows keep working unchanged.
 CURRENCY FIELD: this engine performs NO currency conversion (per the schema
 and ingestion contract, there is no exchange-rate field anywhere). If the
 caller filters by an explicit "currency", the expense rows are filtered by
-it first, then validated, then a formula runs. If no filter is given, the
+it first (as a real, parameterized SQL condition -- never merely echoed
+back), then validated, then a formula runs. If no filter is given, the
 matching expense rows are validated BEFORE any formula call: if they span
 more than one currency, summing/ranking them would silently produce a
 misleading number, so the engine returns MIXED_CURRENCY and never calls
 calculate_total_expenses() / calculate_category_spending() /
 calculate_top_transactions() / calculate_burn_rate() over that mixed set.
 This validate-before-calculate ordering applies to every monetary intent
-(sum_expenses, category_spending, remaining_budget, burn_rate) and to
+(sum_expenses, category_breakdown, remaining_budget, burn_rate), to
 top_transactions (ranking mixed-currency amounts by raw value is an equally
-misleading combination). expense_count is a row count, not a monetary
-value, so no currency check applies to it. If no currency filter is given
-and every matching row shares one currency, that currency is used. If there
-are no matching rows and no filter, the currency is reported as None
-(unknown, not guessed).
+misleading combination), and to source_lookup (returning mixed-currency
+records while labeling them with one currency would be misleading).
+count_expenses is a row count, not a monetary value, so no currency check
+applies to it. If no currency filter is given and every matching row shares
+one currency, that currency is used. If there are no matching rows and no
+filter, the currency is reported as None (unknown, not guessed).
 
 BUDGET CURRENCY: the budgets table has NO currency column (budget_id,
-cost_centre, category, amount, period_start, period_end). For
-remaining_budget and burn_rate, the top-level "currency" field describes
-the expense side only (the side that actually has currency data); engine.py
-never assumes the budget amount shares that currency. Both intents also
-return an explicit "budget_currency": None, so a caller can never mistake
-"currency" for a verified property of the budget amount.
+cost_centre, category, amount, period_start, period_end), and this file
+does not add one or invent budget-currency semantics. For remaining_budget
+and burn_rate, the top-level "currency" field describes the expense side
+only (the side that actually has currency data); engine.py never assumes
+the budget amount shares that currency. Both intents also return an
+explicit "budget_currency": None, so a caller can never mistake "currency"
+for a verified property of the budget amount.
 
 FAILURE SHAPE: INTEGRATION_CONTRACT.md does not define a failure shape (only
 a success example). Failures use the same three core keys, with
@@ -120,12 +129,47 @@ SECURITY
 --------------------------------------------------------------------------
 Every SQL statement filters expenses/budgets by `cost_centre = ?` using the
 authorized_cost_centre argument, via parameterized SQL (never string
-interpolation). No query in this file ever reads a cost-centre value out of
-the `query` dict.
+interpolation). No query in this file EVER uses `query["user_scope"]` (or
+any other query field) to filter the database.
+
+`user_scope`, when the compiler supplies it, is used for exactly one thing:
+a consistency check against the trusted `authorized_cost_centre`. If
+`user_scope` is present and does not equal `authorized_cost_centre`, the
+whole request is rejected with a USER_SCOPE_CONFLICT failure before any
+intent-specific logic runs -- the query is never allowed to silently access
+a different cost centre than the one RBAC authorized.
+
+--------------------------------------------------------------------------
+DATE HANDLING
+--------------------------------------------------------------------------
+The Query Compiler schema types date_range_start/date_range_end as
+Optional[date] (python datetime.date / datetime.datetime). SQLite stores
+expense dates as 'YYYY-MM-DD' strings. _normalize_date() converts a date to
+that representation before it is ever used -- always as a bound SQL
+parameter, never interpolated into the SQL text. As a defensive fallback it
+also accepts a plain string, but does NOT trust it blindly: the string must
+parse as a real, strictly 'YYYY-MM-DD' formatted calendar date (via
+datetime.strptime, which also catches impossible dates such as
+'2026-02-30'). Any other type, a malformed string, or a string that isn't
+an actual date is rejected with a clean INVALID_DATE failure rather than
+letting a bad value reach SQL.
+
+--------------------------------------------------------------------------
+CATEGORY VALUES (e.g. "Snacks")
+--------------------------------------------------------------------------
+The Query Compiler's canonical category list is not the same as
+database/ingestion.py's current ALLOWED_CATEGORIES (e.g. "Snacks" is not
+yet an ingestable category). This file does not validate `category` against
+any allow-list and does not modify database/ingestion.py. It simply filters
+using whatever category string the query supplies; if no expense/budget
+rows exist for that category, the normal empty-result or BUDGET_NOT_FOUND
+behavior applies -- never a crash, a silent 0, or an invented budget.
 """
 
 from __future__ import annotations
 
+import datetime
+import re
 import sqlite3
 from typing import Any, Dict, List, Mapping, Optional, Sequence
 
@@ -139,15 +183,27 @@ from calculation.formulas import (
     calculate_burn_rate,
 )
 
+# The six intents the Query Compiler actually emits.
 SUPPORTED_INTENTS = {
     "sum_expenses",
-    "category_spending",
-    "expense_count",
+    "category_breakdown",
     "top_transactions",
+    "count_expenses",
     "remaining_budget",
-    "burn_rate",
-    "source_rows",
+    "source_lookup",
 }
+
+# Extra engine-only capability, not part of the compiler contract (see
+# module docstring). Kept separate so it's obvious it isn't one of the six.
+_EXTRA_INTENTS = {"burn_rate"}
+
+_ALL_INTENTS = SUPPORTED_INTENTS | _EXTRA_INTENTS
+
+DEFAULT_TOP_TRANSACTIONS_LIMIT = 5
+
+# Strict shape check applied to a date string BEFORE it is parsed by
+# datetime.strptime() in _normalize_date() -- see that function's docstring.
+_DATE_STRING_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 
 class EngineError(Exception):
@@ -173,16 +229,16 @@ def run_calculation(query: Mapping[str, Any], authorized_cost_centre: str) -> Di
     Run one calculation-engine operation.
 
     Args:
-        query: structured query dict. Must contain "intent" (see
-            SUPPORTED_INTENTS). May contain the contract fields
-            (category, date_start, date_end) and, where a specific intent
-            needs them, the engine-level fields documented at the top of
-            this file (top_n, currency, expense_ids).
+        query: structured query dict produced by the Query Compiler. Must
+            contain "intent" (see SUPPORTED_INTENTS). May contain
+            "user_scope", "category", "date_range_start", "date_range_end",
+            "limit" (top_transactions only) and "currency".
         authorized_cost_centre: the cost centre the caller is authorized
             for, resolved by the (future) auth/RBAC layer. This is the ONLY
-            source of the security scope -- nothing inside `query` is ever
-            used for authorization, so a caller cannot override it by
-            putting a cost_centre-shaped value inside the query dict.
+            source of the security scope used to filter the database.
+            `query["user_scope"]`, if present, is checked for consistency
+            against this value but never used to filter -- see SECURITY in
+            the module docstring.
 
     Returns:
         A result dict. Always contains "status", "result", "currency" and
@@ -198,8 +254,19 @@ def run_calculation(query: Mapping[str, Any], authorized_cost_centre: str) -> Di
     if not isinstance(query, Mapping):
         return _failure("INVALID_QUERY", "query must be a mapping (e.g. a dict).")
 
+    # Security check runs before intent validation/dispatch: a user_scope
+    # that conflicts with the trusted authorized_cost_centre must be
+    # rejected outright, regardless of what intent was requested.
+    user_scope = query.get("user_scope")
+    if user_scope is not None and user_scope != authorized_cost_centre:
+        return _failure(
+            "USER_SCOPE_CONFLICT",
+            f"query user_scope {user_scope!r} does not match the authorized "
+            f"cost centre {authorized_cost_centre!r}; request rejected.",
+        )
+
     intent = query.get("intent")
-    if intent not in SUPPORTED_INTENTS:
+    if intent not in _ALL_INTENTS:
         return _failure(
             "UNKNOWN_INTENT",
             f"Unsupported intent: {intent!r}. Supported intents: {sorted(SUPPORTED_INTENTS)}",
@@ -212,7 +279,7 @@ def run_calculation(query: Mapping[str, Any], authorized_cost_centre: str) -> Di
         return _failure(exc.status, exc.message)
     except (ValueError, TypeError) as exc:
         # Raised by calculation/formulas.py for bad numeric input, a bad
-        # top_n, etc. Surfaced as a clean status instead of a raw traceback.
+        # limit, etc. Surfaced as a clean status instead of a raw traceback.
         return _failure("CALCULATION_ERROR", str(exc))
     except sqlite3.Error:
         # Never leak raw database exception details to the caller.
@@ -228,21 +295,84 @@ def _dispatch(
     """Route to the handler for one intent. Assumes intent is already valid."""
     if intent == "sum_expenses":
         return _handle_sum_expenses(conn, query, authorized_cost_centre)
-    if intent == "category_spending":
-        return _handle_category_spending(conn, query, authorized_cost_centre)
-    if intent == "expense_count":
-        return _handle_expense_count(conn, query, authorized_cost_centre)
+    if intent == "category_breakdown":
+        return _handle_category_breakdown(conn, query, authorized_cost_centre)
+    if intent == "count_expenses":
+        return _handle_count_expenses(conn, query, authorized_cost_centre)
     if intent == "top_transactions":
         return _handle_top_transactions(conn, query, authorized_cost_centre)
     if intent == "remaining_budget":
         return _handle_remaining_budget(conn, query, authorized_cost_centre)
     if intent == "burn_rate":
         return _handle_burn_rate(conn, query, authorized_cost_centre)
-    if intent == "source_rows":
-        return _handle_source_rows(conn, query, authorized_cost_centre)
+    if intent == "source_lookup":
+        return _handle_source_lookup(conn, query, authorized_cost_centre)
     # Unreachable: run_calculation() already validated intent against
-    # SUPPORTED_INTENTS before calling _dispatch().
+    # _ALL_INTENTS before calling _dispatch().
     raise EngineError("UNKNOWN_INTENT", f"Unsupported intent: {intent!r}")
+
+
+# --------------------------------------------------------------------------
+# Query-field helpers
+# --------------------------------------------------------------------------
+
+def _normalize_date(value: Any, label: str) -> Optional[str]:
+    """
+    Normalize a date-like query value to the 'YYYY-MM-DD' string the
+    database stores.
+
+    Accepts: None, datetime.date, datetime.datetime (converted via
+    .date()), or a str. The Query Compiler schema types these fields as
+    Optional[date], but this stays defensive in case a caller passes a
+    string instead. A string is NOT accepted at face value -- it must first
+    match _DATE_STRING_RE (^\\d{4}-\\d{2}-\\d{2}$) exactly, so loosely-shaped
+    input like '2026-9-1' (strptime would otherwise accept the missing zero
+    padding) or anything with extra characters is rejected before parsing
+    even starts; only then is it parsed with datetime.strptime, which
+    rejects impossible calendar dates like '2026-02-30'. Anything else --
+    the wrong type, a string that fails the regex, or one that fails to
+    parse -- is rejected with a clean INVALID_DATE EngineError instead of
+    letting a malformed value reach SQL. The result is always used as a
+    bound parameter -- never interpolated into SQL text.
+    """
+    if value is None:
+        return None
+    if isinstance(value, datetime.datetime):
+        return value.date().isoformat()
+    if isinstance(value, datetime.date):
+        return value.isoformat()
+    if isinstance(value, str):
+        if not _DATE_STRING_RE.match(value):
+            raise EngineError(
+                "INVALID_DATE",
+                f"{label} must be a valid 'YYYY-MM-DD' date, got {value!r}",
+            )
+        try:
+            parsed = datetime.datetime.strptime(value, "%Y-%m-%d").date()
+        except ValueError:
+            raise EngineError(
+                "INVALID_DATE",
+                f"{label} must be a valid 'YYYY-MM-DD' date, got {value!r}",
+            )
+        return parsed.isoformat()
+    raise EngineError(
+        "INVALID_DATE",
+        f"{label} must be a date or a 'YYYY-MM-DD' string, got {type(value).__name__}: {value!r}",
+    )
+
+
+def _extract_filters(query: Mapping[str, Any]) -> tuple:
+    """
+    Pull the common filter fields off a Query Compiler query object:
+    category, date_range_start, date_range_end (normalized to
+    'YYYY-MM-DD'), and currency. Shared by every intent handler so the
+    field names are read in exactly one place.
+    """
+    category = query.get("category")
+    date_start = _normalize_date(query.get("date_range_start"), "date_range_start")
+    date_end = _normalize_date(query.get("date_range_end"), "date_range_end")
+    currency = query.get("currency")
+    return category, date_start, date_end, currency
 
 
 # --------------------------------------------------------------------------
@@ -260,7 +390,9 @@ def _fetch_expenses(
     """
     Retrieve expense rows for the authorized cost centre, with optional
     filters, and convert them from sqlite3.Row to plain dict (required by
-    calculation/formulas.py). Date range is inclusive on both ends.
+    calculation/formulas.py). Date range is inclusive on both ends. All
+    filter values (category/date_start/date_end/currency) must already be
+    plain strings -- callers normalize dates via _normalize_date() first.
     """
     sql = "SELECT * FROM expenses WHERE cost_centre = ?"
     params: List[Any] = [authorized_cost_centre]
@@ -288,6 +420,7 @@ def _fetch_budget(
     category: Optional[str],
     date_start: Optional[str],
     date_end: Optional[str],
+    purpose: str = "remaining budget",
 ) -> Dict[str, Any]:
     """
     Locate the single applicable budget row for the authorized cost centre.
@@ -303,7 +436,10 @@ def _fetch_budget(
     pair, or the lookup is ambiguous.
 
     Never invents a budget. Raises EngineError on any failure to find
-    exactly one matching row.
+    exactly one matching row. `purpose` (e.g. "remaining budget" or
+    "burn rate") is folded into the BUDGET_NOT_FOUND message so it clearly
+    names the missing category, matching the required message shape:
+    "Cannot compute <purpose>: no budget allocated for <category>".
     """
     if not category:
         raise EngineError(
@@ -324,17 +460,17 @@ def _fetch_budget(
     budgets = [dict(row) for row in rows]
 
     if not budgets:
-        period_note = f", period {date_start} to {date_end}" if (date_start or date_end) else " (no period specified)"
+        # Required message shape, e.g.:
+        #   "Cannot compute remaining budget: no budget allocated for Snacks"
         raise EngineError(
             "BUDGET_NOT_FOUND",
-            f"No budget found for cost_centre={authorized_cost_centre!r}, "
-            f"category={category!r}{period_note}.",
+            f"Cannot compute {purpose}: no budget allocated for {category}",
         )
     if len(budgets) > 1:
         raise EngineError(
             "AMBIGUOUS_BUDGET",
             f"{len(budgets)} budgets match cost_centre={authorized_cost_centre!r}, "
-            f"category={category!r}; specify date_start/date_end to select exactly one period.",
+            f"category={category!r}; specify date_range_start/date_range_end to select exactly one period.",
         )
     return budgets[0]
 
@@ -350,9 +486,9 @@ def _resolve_currency(records: Sequence[Dict[str, Any]], requested_currency: Opt
     - If the caller explicitly filtered by currency, echo that back
       (even if zero rows matched -- the caller already named it).
     - Otherwise, every record must share one currency: combining different
-      currencies into a single number would be misleading, since this
-      engine performs no conversion. Raises EngineError if more than one
-      currency is present.
+      currencies into a single number (or a single ranked/labeled list)
+      would be misleading, since this engine performs no conversion.
+      Raises EngineError if more than one currency is present.
     - If there are no records and no explicit filter, the currency is
       unknown and reported as None rather than guessed.
     """
@@ -364,7 +500,7 @@ def _resolve_currency(records: Sequence[Dict[str, Any]], requested_currency: Opt
         raise EngineError(
             "MIXED_CURRENCY",
             f"Matching records span multiple currencies ({sorted(currencies)}); "
-            "supply an engine-level 'currency' filter to get a meaningful result.",
+            "supply an explicit 'currency' filter to get a meaningful result.",
         )
     if len(currencies) == 1:
         return next(iter(currencies))
@@ -381,7 +517,7 @@ def _build_filters(
     date_start: Optional[str] = None,
     date_end: Optional[str] = None,
     currency: Optional[str] = None,
-    top_n: Optional[int] = None,
+    limit: Optional[int] = None,
 ) -> Dict[str, Any]:
     """Build a human-readable record of which filters were actually applied."""
     filters: Dict[str, Any] = {"cost_centre": authorized_cost_centre}
@@ -391,8 +527,8 @@ def _build_filters(
         filters["date_range"] = f"{date_start or '...'} to {date_end or '...'}"
     if currency is not None:
         filters["currency"] = currency
-    if top_n is not None:
-        filters["top_n"] = top_n
+    if limit is not None:
+        filters["limit"] = limit
     return filters
 
 
@@ -433,10 +569,7 @@ def _failure(status: str, message: str, **extra: Any) -> Dict[str, Any]:
 def _handle_sum_expenses(
     conn: sqlite3.Connection, query: Mapping[str, Any], authorized_cost_centre: str
 ) -> Dict[str, Any]:
-    category = query.get("category")
-    date_start = query.get("date_start")
-    date_end = query.get("date_end")
-    currency = query.get("currency")  # engine-level field, not in the contract
+    category, date_start, date_end, currency = _extract_filters(query)
 
     expenses = _fetch_expenses(conn, authorized_cost_centre, category, date_start, date_end, currency)
 
@@ -458,13 +591,10 @@ def _handle_sum_expenses(
     )
 
 
-def _handle_category_spending(
+def _handle_category_breakdown(
     conn: sqlite3.Connection, query: Mapping[str, Any], authorized_cost_centre: str
 ) -> Dict[str, Any]:
-    category = query.get("category")
-    date_start = query.get("date_start")
-    date_end = query.get("date_end")
-    currency = query.get("currency")
+    category, date_start, date_end, currency = _extract_filters(query)
 
     expenses = _fetch_expenses(conn, authorized_cost_centre, category, date_start, date_end, currency)
 
@@ -486,13 +616,10 @@ def _handle_category_spending(
     )
 
 
-def _handle_expense_count(
+def _handle_count_expenses(
     conn: sqlite3.Connection, query: Mapping[str, Any], authorized_cost_centre: str
 ) -> Dict[str, Any]:
-    category = query.get("category")
-    date_start = query.get("date_start")
-    date_end = query.get("date_end")
-    currency = query.get("currency")
+    category, date_start, date_end, currency = _extract_filters(query)
 
     expenses = _fetch_expenses(conn, authorized_cost_centre, category, date_start, date_end, currency)
     count = calculate_expense_count(expenses)
@@ -514,11 +641,8 @@ def _handle_expense_count(
 def _handle_top_transactions(
     conn: sqlite3.Connection, query: Mapping[str, Any], authorized_cost_centre: str
 ) -> Dict[str, Any]:
-    category = query.get("category")
-    date_start = query.get("date_start")
-    date_end = query.get("date_end")
-    currency = query.get("currency")
-    top_n = query.get("top_n", 5)  # engine-level field; formulas.py validates it
+    category, date_start, date_end, currency = _extract_filters(query)
+    limit = query.get("limit", DEFAULT_TOP_TRANSACTIONS_LIMIT)  # formulas.py validates this
 
     expenses = _fetch_expenses(conn, authorized_cost_centre, category, date_start, date_end, currency)
 
@@ -530,15 +654,15 @@ def _handle_top_transactions(
     # calculate_top_transactions(), not just over whichever records happen
     # to end up in the top N.
     resolved_currency = _resolve_currency(expenses, currency)
-    top_records = calculate_top_transactions(expenses, top_n)  # sorting done by formulas.py
+    top_records = calculate_top_transactions(expenses, limit)  # sorting + limit validation done by formulas.py
     source_rows = [r["expense_id"] for r in top_records]
 
     return _success(
         result=top_records,  # full records preserved -- no evidence lost
         source_rows=source_rows,
         currency=resolved_currency,
-        formula=f"TOP {top_n} BY amount DESC",
-        filters=_build_filters(authorized_cost_centre, category, date_start, date_end, currency, top_n),
+        formula=f"TOP {limit} BY amount DESC",
+        filters=_build_filters(authorized_cost_centre, category, date_start, date_end, currency, limit),
         row_count=len(expenses),
     )
 
@@ -546,14 +670,15 @@ def _handle_top_transactions(
 def _handle_remaining_budget(
     conn: sqlite3.Connection, query: Mapping[str, Any], authorized_cost_centre: str
 ) -> Dict[str, Any]:
-    category = query.get("category")
-    date_start = query.get("date_start")
-    date_end = query.get("date_end")
-    currency = query.get("currency")
+    category, date_start, date_end, currency = _extract_filters(query)
 
     # Never invents a budget -- raises BUDGET_NOT_FOUND / AMBIGUOUS_BUDGET
-    # via EngineError, caught by run_calculation().
-    budget = _fetch_budget(conn, authorized_cost_centre, category, date_start, date_end)
+    # via EngineError, caught by run_calculation(). Message names the
+    # missing category explicitly, e.g.:
+    #   "Cannot compute remaining budget: no budget allocated for Snacks"
+    budget = _fetch_budget(
+        conn, authorized_cost_centre, category, date_start, date_end, purpose="remaining budget"
+    )
 
     # "Remaining budget" means what's left of THIS budget's own period, so
     # spend is measured over budget["period_start"]..budget["period_end"],
@@ -600,12 +725,16 @@ def _handle_remaining_budget(
 def _handle_burn_rate(
     conn: sqlite3.Connection, query: Mapping[str, Any], authorized_cost_centre: str
 ) -> Dict[str, Any]:
-    category = query.get("category")
-    date_start = query.get("date_start")
-    date_end = query.get("date_end")
-    currency = query.get("currency")
+    """
+    Extra, non-compiler engine capability (see module docstring). Not one of
+    the six Query Compiler intents, but kept available and consistent with
+    remaining_budget's currency/missing-budget handling.
+    """
+    category, date_start, date_end, currency = _extract_filters(query)
 
-    budget = _fetch_budget(conn, authorized_cost_centre, category, date_start, date_end)
+    budget = _fetch_budget(
+        conn, authorized_cost_centre, category, date_start, date_end, purpose="burn rate"
+    )
 
     expenses = _fetch_expenses(
         conn,
@@ -650,51 +779,35 @@ def _handle_burn_rate(
     )
 
 
-def _handle_source_rows(
+def _handle_source_lookup(
     conn: sqlite3.Connection, query: Mapping[str, Any], authorized_cost_centre: str
 ) -> Dict[str, Any]:
     """
-    Engine-level source-row lookup/retrieval (operation 7 from the task
-    requirements). NOT part of INTEGRATION_CONTRACT.md's documented query
-    fields -- reads an engine-level 'expense_ids' list so the audit/
-    evidence layer can re-fetch full records behind a previously returned
-    source_rows list. Every row is still constrained to
-    authorized_cost_centre; an id belonging to a different cost centre is
-    simply excluded from the result, never leaked.
+    Filtered source-row lookup/retrieval. Per the latest Query Compiler
+    contract this intent no longer takes an expense_ids list (the compiler
+    schema has none) -- it uses the same filters as every other intent
+    (category, date_range_start/end, currency), constrained to
+    authorized_cost_centre exactly like _fetch_expenses(). Returns the
+    matching expense records as "result" and their expense_id values as
+    "source_rows". Records from another cost centre can never be returned,
+    since the query is scoped by authorized_cost_centre like every other
+    handler in this file.
 
-    If an engine-level 'currency' is supplied, it is applied as a real SQL
-    filter (parameterized, never string-interpolated) -- only matching
-    rows are returned, and "currency" in the result reflects what was
-    actually fetched, not merely what was requested. If no currency is
-    supplied, all matching rows are returned and the existing
-    mixed-currency detection (_resolve_currency) still applies: a result
-    spanning more than one currency is refused rather than silently mixed.
+    If an explicit currency is supplied, it is applied as a real SQL filter
+    (via _fetch_expenses -- parameterized, never string-interpolated), so
+    only matching rows are returned; "currency" in the result reflects what
+    was actually fetched, not merely what was requested. If no currency is
+    supplied, the existing mixed-currency detection (_resolve_currency)
+    still applies: a result spanning more than one currency is refused
+    rather than silently mixed.
     """
-    expense_ids = query.get("expense_ids")
-    if not expense_ids or not isinstance(expense_ids, (list, tuple)):
-        raise EngineError(
-            "MISSING_EXPENSE_IDS",
-            "'expense_ids' (a non-empty list of expense_id strings) is required for the source_rows intent.",
-        )
+    category, date_start, date_end, currency = _extract_filters(query)
 
-    currency = query.get("currency")
-    placeholders = ",".join("?" for _ in expense_ids)
-    sql = f"SELECT * FROM expenses WHERE cost_centre = ? AND expense_id IN ({placeholders})"
-    params: List[Any] = [authorized_cost_centre, *expense_ids]
+    records = _fetch_expenses(conn, authorized_cost_centre, category, date_start, date_end, currency)
 
-    # BUG FIX: an explicit currency filter must actually constrain the SQL,
-    # not just be echoed back afterward -- otherwise a caller could request
-    # currency="INR" and silently receive USD rows mixed in. Parameterized
-    # just like every other filter here; never string-interpolated.
-    if currency is not None:
-        sql += " AND currency = ?"
-        params.append(currency)
-
-    rows = conn.execute(sql, params).fetchall()
-    records = [dict(row) for row in rows]
-
-    # If no currency was supplied, preserve the existing mixed-currency
-    # detection: reject rather than silently mix INR/USD/EUR records.
+    # Validate currency compatibility before returning results as a single
+    # currency-labeled set, for the same reason as the other monetary/
+    # evidence-bearing intents.
     resolved_currency = _resolve_currency(records, currency)
     source_rows = [r["expense_id"] for r in records]
 
@@ -702,7 +815,7 @@ def _handle_source_rows(
         result=records,
         source_rows=source_rows,
         currency=resolved_currency,
-        formula="SELECT * WHERE expense_id IN (...)",
-        filters=_build_filters(authorized_cost_centre, currency=currency),
+        formula="SELECT * (authorized, filtered)",
+        filters=_build_filters(authorized_cost_centre, category, date_start, date_end, currency),
         row_count=len(records),
     )
