@@ -1,8 +1,8 @@
 import pandas as pd
 from pathlib import Path
 
-from compiler import compile_query, Status, Intent
-from schema import AuthorizationScope, ScopeType
+from .compiler import compile_query, Status, Intent
+from .schema import AuthorizationScope, ScopeType
 
 
 # ============================================================
