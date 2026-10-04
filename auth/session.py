@@ -1,5 +1,7 @@
 """Context-local authenticated identity helpers for a single request/task."""
 
+from __future__ import annotations
+
 from contextvars import ContextVar
 
 from auth.authentication import AuthenticatedUser, VALID_ROLES
