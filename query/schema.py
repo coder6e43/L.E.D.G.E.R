@@ -11,7 +11,7 @@ from enum import Enum
 from datetime import date
 from typing import Optional
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
 
 # ---------------------------------------------------------------------
@@ -34,6 +34,45 @@ class Status(str, Enum):
 
 
 # ---------------------------------------------------------------------
+# Trusted authorization scope
+# ---------------------------------------------------------------------
+
+class ScopeType(str, Enum):
+    user = "user"
+    cost_centre = "cost_centre"
+    organization = "organization"
+
+
+class AuthorizationScope(BaseModel):
+    """Trusted scope supplied by Auth/RBAC, never by the client."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    user_id: str
+    role: str
+    scope_type: ScopeType
+    scope_user_id: Optional[str] = None
+    cost_centre: Optional[str] = None
+
+    @model_validator(mode="after")
+    def validate_scope_shape(self):
+        if self.scope_type == ScopeType.user:
+            if not self.scope_user_id:
+                raise ValueError("user scope requires scope_user_id")
+            if self.cost_centre is not None:
+                raise ValueError("user scope must not contain cost_centre")
+        elif self.scope_type == ScopeType.cost_centre:
+            if not self.cost_centre:
+                raise ValueError("cost_centre scope requires cost_centre")
+            if self.scope_user_id is not None:
+                raise ValueError("cost_centre scope must not contain scope_user_id")
+        elif self.scope_type == ScopeType.organization:
+            if self.scope_user_id is not None or self.cost_centre is not None:
+                raise ValueError("organization scope must not be narrowed to a user or cost centre")
+        return self
+
+
+# ---------------------------------------------------------------------
 # Core query object
 # ---------------------------------------------------------------------
 
@@ -42,7 +81,7 @@ class Query(BaseModel):
     This is exactly what gets handed to the Database + Calculation Engine.
     """
     intent: Intent
-    user_scope: str                      # inherited from session; NEVER set from the prompt
+    scope: AuthorizationScope            # inherited from Auth/RBAC; NEVER set by the client
     category: Optional[str] = None
     date_range_start: Optional[date] = None
     date_range_end: Optional[date] = None
