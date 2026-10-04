@@ -20,6 +20,7 @@ from typing import Any, Optional
 from fastapi import Depends, FastAPI, HTTPException
 from pydantic import BaseModel, ConfigDict
 
+from audit.api import router as audit_router
 from audit.logger import DEFAULT_DB, log_query
 from auth.authentication import AuthenticatedUser, authenticate_user
 from auth.rbac import AuthorizationError, get_authorized_scope, has_permission
@@ -36,6 +37,7 @@ from query.schema import AuthorizationScope, ScopeType, Status
 
 app = FastAPI(title="LEDGER API")
 app.include_router(query_router)
+app.include_router(audit_router)
 
 
 # -----------------------------------------------------------------------------
