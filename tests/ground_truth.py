@@ -2,16 +2,21 @@ import pandas as pd
 
 EXPENSES_CSV = "data/sample_expenses.csv"
 BUDGETS_CSV = "data/sample_budgets.csv"
-VALID_CATEGORIES = {"Software", "Food", "Travel", "Marketing"}
+
+# Mirrors database/ingestion.py ALLOWED_CATEGORIES (a test checks they match).
+VALID_CATEGORIES = {"Food", "Travel", "Software", "Office Supplies",
+                    "Utilities", "Marketing", "Training", "Miscellaneous"}
+VALID_CURRENCIES = {"INR", "USD", "EUR"}
 
 
 def load_clean_expenses(csv_path=EXPENSES_CSV):
-    """Apply the ingestion rules: no duplicates, valid dates, valid categories."""
+    """Apply the ingestion rules: valid date, category, currency; no duplicate IDs."""
     df = pd.read_csv(csv_path)
     date_col = "expense_date" if "expense_date" in df.columns else "date"
     df["_date"] = pd.to_datetime(df[date_col], format="%Y-%m-%d", errors="coerce")
     df = df.dropna(subset=["_date"])
     df = df[df["category"].isin(VALID_CATEGORIES)]
+    df = df[df["currency"].isin(VALID_CURRENCIES)]
     df = df.drop_duplicates(subset="expense_id", keep="first")
     return df
 
