@@ -1,62 +1,76 @@
-"""
-api.py — FastAPI router for the Query Compiler module (Niketan)
+"""FastAPI boundary for the deterministic Query Compiler.
 
-Exposes compile_query() as an HTTP endpoint so other services (or a
-separate frontend) can call it. This is a ROUTER, not a standalone app —
-it's meant to be plugged into the team's shared FastAPI app alongside
-everyone else's modules (Auth, Database, Calculation Engine, etc).
-
-Usage from the team's main app.py:
-    from fastapi import FastAPI
-    from query.api import router as query_router
-
-    app = FastAPI(title="LEDGER API")
-    app.include_router(query_router)
-
-Then the endpoint is available at: POST /query/compile
+The request body contains only query intent data. Authorization scope is
+resolved by the trusted Auth/RBAC dependency and is never accepted from the
+frontend as a trusted value.
 """
 
 from datetime import date
 from typing import Optional
 
-from fastapi import APIRouter
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, ConfigDict
 
 from .compiler import compile_query
-from .schema import CompilerResponse
+from .schema import AuthorizationScope, CompilerResponse
 
 router = APIRouter(prefix="/query", tags=["Query Compiler"])
 
 
 class CompileQueryRequest(BaseModel):
-    """What the frontend/client sends in the request body."""
+    """Client input. Authorization fields are deliberately not accepted."""
+
+    model_config = ConfigDict(extra="forbid")
+
     prompt: str
-    user_scope: str
-    # NOTE (security): user_scope should eventually be derived server-side
-    # from an authenticated session/token (Shubham's Auth module), not
-    # trusted directly from the request body — see the project's own
-    # "frontend must not be trusted to define authorized cost centre" rule.
-    # Accepting it here is a placeholder until Auth exposes a dependency
-    # (e.g. Depends(get_current_user_scope)) that this endpoint can use
-    # instead of this field.
     current_date: Optional[date] = None
 
 
+def get_trusted_scope() -> AuthorizationScope:
+    """Resolve scope from the host application's Auth/RBAC session.
+
+    This adapter does not authenticate or authorize anything. It only
+    consumes the trusted Auth/RBAC result and converts it to the compiler's
+    schema. The auth package is imported here so the Query Compiler remains
+    independently testable until the host app merges Auth/RBAC.
+    """
+
+    try:
+        from auth import AuthorizationError, get_authorized_scope, get_current_user
+    except ImportError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Auth/RBAC integration is not available yet.",
+        ) from exc
+
+    user = get_current_user()
+    if user is None:
+        raise HTTPException(status_code=401, detail="Authentication required.")
+
+    try:
+        trusted = get_authorized_scope(user)
+    except AuthorizationError as exc:
+        raise HTTPException(status_code=403, detail="Authorization denied.") from exc
+
+    return AuthorizationScope.model_validate(trusted)
+
+
 @router.post("/compile", response_model=CompilerResponse)
-def compile_query_endpoint(request: CompileQueryRequest) -> CompilerResponse:
-    """
-    Converts a natural-language financial question into a validated
-    structured query, or a CLARIFY / REFUSED response.
-    """
+def compile_query_endpoint(
+    request: CompileQueryRequest,
+    scope: AuthorizationScope = Depends(get_trusted_scope),
+) -> CompilerResponse:
+    """Compile a natural-language financial question using trusted scope."""
+
     return compile_query(
         prompt=request.prompt,
-        user_scope=request.user_scope,
+        scope=scope,
         current_date=request.current_date,
     )
 
 
 @router.get("/health")
 def health_check():
-    """Simple check that this router is alive — useful for teammates
-    wiring the frontend to confirm the endpoint is reachable."""
+    """Simple liveness check for the Query Compiler router."""
+
     return {"status": "ok", "module": "query-compiler"}
