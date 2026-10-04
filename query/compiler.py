@@ -8,7 +8,7 @@ project's "no guessing" architecture.
 Usage:
     from compiler import compile_query
     result = compile_query("How much did I spend on food this month?",
-                            user_scope="CC-TECH")
+                            scope={"user_id": "u1", "role": "Employee", "scope_type": "user", "scope_user_id": "u1"})
 """
 import re
 import calendar
@@ -17,7 +17,7 @@ from typing import List, Optional, Tuple
 from dateutil.relativedelta import relativedelta
 from pydantic import ValidationError
 from .schema import (
-    Query, CompilerResponse, Status, Intent,
+    Query, CompilerResponse, Status, Intent, AuthorizationScope,
     normalize_category, mentions_unknown_category, CANONICAL_CATEGORIES,
 )
 # =======================================================================
@@ -303,12 +303,13 @@ DATE_REQUIRED_INTENTS = {
     Intent.count_expenses,
 }
 def compile_query(
-    prompt: str, user_scope: str, current_date: Optional[date] = None
+    prompt: str, scope: AuthorizationScope, current_date: Optional[date] = None
 ) -> CompilerResponse:
     """
     prompt:        raw natural-language question from the user
-    user_scope:    the AUTHENTICATED cost-centre/user scope from the session
-                   (never taken from the prompt itself — see Auth module)
+    scope:         trusted authorization scope from Auth/RBAC. This is never
+                   accepted from the client and is preserved in the structured
+                   query exactly as supplied by the trusted host layer.
     current_date:  inject "today" for deterministic testing; defaults to
                    the real today if omitted
     """
@@ -363,7 +364,7 @@ def compile_query(
     try:
         query = Query(
             intent=intent,
-            user_scope=user_scope,
+            scope=scope,
             category=category,
             date_range_start=date_start,
             date_range_end=date_end,
@@ -407,7 +408,7 @@ if __name__ == "__main__":
     "How much did I spend on fuel reimbursement?",
     ]
     for prompt in test_cases:
-        result = compile_query(prompt, user_scope="CC-TECH", current_date=TODAY)
+        result = compile_query(prompt, scope=AuthorizationScope(user_id="u1", role="Employee", scope_type="user", scope_user_id="u1"), current_date=TODAY)
         print(f"\nPrompt:  {prompt}")
         print(f"Status:  {result.status}")
         if result.query:
