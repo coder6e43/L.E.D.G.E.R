@@ -107,9 +107,9 @@ def test_manager_can_view_only_assigned_cost_centre_operations():
 @pytest.mark.parametrize(
     ("role", "expected"),
     [
-        ("Employee", {"user_id": "U001", "role": "Employee", "scope_type": "user", "scope_user_id": "U001"}),
-        ("Manager", {"user_id": "U001", "role": "Manager", "scope_type": "cost_centre", "cost_centre": "CC-TECH"}),
-        ("Admin", {"user_id": "U001", "role": "Admin", "scope_type": "organization"}),
+        ("Employee", {"user_id": "U001", "role": "Employee", "scope_type": "user", "scope_value": "U001", "scope_user_id": "U001"}),
+        ("Manager", {"user_id": "U001", "role": "Manager", "scope_type": "cost_centre", "scope_value": "CC-TECH", "cost_centre": "CC-TECH"}),
+        ("Admin", {"user_id": "U001", "role": "Admin", "scope_type": "organization", "scope_value": "organization"}),
     ],
 )
 def test_authorized_scope_is_role_derived(role, expected):
@@ -162,6 +162,25 @@ def test_conflicting_role_override_is_denied_for_every_role():
             authorize_role(user, "Admin" if role != "Admin" else "Employee")
         with pytest.raises(AuthorizationError):
             get_authorized_scope(user, requested_role="Root")
+
+
+@pytest.mark.parametrize(
+    ("role", "requested_scope_value"),
+    [
+        ("Employee", "U999"),
+        ("Manager", "CC-FINANCE"),
+        ("Admin", "CC-TECH"),
+    ],
+)
+def test_conflicting_scope_value_is_denied(role, requested_scope_value):
+    with pytest.raises(AuthorizationError):
+        get_authorized_scope(make_user(role), requested_scope_value=requested_scope_value)
+
+
+@pytest.mark.parametrize("role", ROLES)
+def test_conflicting_user_identity_is_denied_for_every_role(role):
+    with pytest.raises(AuthorizationError):
+        get_authorized_scope(make_user(role), requested_user_id="U999")
 
 
 def test_fabricated_identity_and_unauthenticated_context_fail_closed():

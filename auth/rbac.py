@@ -128,12 +128,15 @@ def resolve_authorized_scope(
     *,
     requested_role: str | None = None,
     requested_user_id: str | None = None,
+    requested_scope_value: str | None = None,
 ) -> dict[str, str]:
     """Return the role-derived data scope, rejecting attempted scope escalation."""
     _require_authenticated_user(user)
     role = authorize_role(user, requested_role)
     if not isinstance(user.user_id, str) or not user.user_id.strip():
         raise AuthorizationError("Authenticated user identity is unavailable.")
+    if requested_user_id is not None and requested_user_id != user.user_id:
+        raise AuthorizationError("Access using the requested user identity is denied.")
 
     if role == "Employee":
         require_permission(user, "expense:view_own")
@@ -141,10 +144,13 @@ def resolve_authorized_scope(
             raise AuthorizationError("Access to another user's data is denied.")
         if requested_cost_centre is not None:
             raise AuthorizationError("Employee scope cannot be changed to a cost centre.")
+        if requested_scope_value is not None and requested_scope_value != user.user_id:
+            raise AuthorizationError("Access to another user's scope is denied.")
         return {
             "user_id": user.user_id,
             "role": role,
             "scope_type": "user",
+            "scope_value": user.user_id,
             "scope_user_id": user.user_id,
         }
 
@@ -152,10 +158,13 @@ def resolve_authorized_scope(
         authorized = get_authorized_cost_centre(user)
         if requested_cost_centre is not None and requested_cost_centre != authorized:
             raise AuthorizationError("Access to the requested cost centre is denied.")
+        if requested_scope_value is not None and requested_scope_value != authorized:
+            raise AuthorizationError("Access to the requested cost-centre scope is denied.")
         return {
             "user_id": user.user_id,
             "role": role,
             "scope_type": "cost_centre",
+            "scope_value": authorized,
             "cost_centre": authorized,
         }
 
@@ -164,7 +173,14 @@ def resolve_authorized_scope(
         raise AuthorizationError(
             "Organization scope cannot be replaced by a request cost-centre filter."
         )
-    return {"user_id": user.user_id, "role": role, "scope_type": "organization"}
+    if requested_scope_value is not None and requested_scope_value != "organization":
+        raise AuthorizationError("Organization scope cannot be replaced by a request scope.")
+    return {
+        "user_id": user.user_id,
+        "role": role,
+        "scope_type": "organization",
+        "scope_value": "organization",
+    }
 
 
 def get_authorized_scope(
@@ -173,6 +189,7 @@ def get_authorized_scope(
     *,
     requested_role: str | None = None,
     requested_user_id: str | None = None,
+    requested_scope_value: str | None = None,
 ) -> dict[str, str]:
     """Return trusted identity plus user, cost-centre, or organization scope."""
     return resolve_authorized_scope(
@@ -180,6 +197,7 @@ def get_authorized_scope(
         requested_cost_centre,
         requested_role=requested_role,
         requested_user_id=requested_user_id,
+        requested_scope_value=requested_scope_value,
     )
 
 

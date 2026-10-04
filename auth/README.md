@@ -55,18 +55,20 @@ false for undefined permissions and `require_permission` raises
 ## Data scope
 
 Call `get_current_user()` and then `get_authorized_scope(user)`. The returned
-mapping has a role-derived `scope_type`:
+mapping has a role-derived `scope_type` and canonical `scope_value`:
 
-- Employee: `scope_type="user"` and `scope_user_id` is the authenticated
-  user's ID. Employee scope does not include a cost-centre-wide grant.
-- Manager: `scope_type="cost_centre"` and `cost_centre` is the authenticated
-  user's assigned centre.
-- Admin: `scope_type="organization"`; no single cost-centre filter is
-  represented as the complete scope.
+- Employee: `scope_type="user"`, `scope_value` is the authenticated user's ID,
+  and `scope_user_id` preserves compatibility with typed downstream adapters.
+  Employee scope does not include a cost-centre-wide grant.
+- Manager: `scope_type="cost_centre"`, `scope_value` is the authenticated
+  user's assigned centre, and `cost_centre` preserves compatibility with
+  typed downstream adapters.
+- Admin: `scope_type="organization"` and `scope_value="organization"`; no
+  single cost-centre filter is represented as the complete scope.
 
-Never use request-provided `user_id`, `role`, or `cost_centre` as trusted
-identity or authorization scope. Conflicting role or scope values are
-rejected. `authorize_cost_centre` lets a Manager operate only in their
+Never use request-provided `user_id`, `role`, `cost_centre`, or `scope_value`
+as trusted identity or authorization scope. Conflicting role or scope values
+are rejected. `authorize_cost_centre` lets a Manager operate only in their
 assigned centre; an Admin may authorize a specific centre filter because the
 Admin has organization-wide access. Employees cannot use it to widen their
 own-data scope.
