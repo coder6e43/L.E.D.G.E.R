@@ -4,6 +4,7 @@ from datetime import date
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+import pytest
 
 from query import api
 from query.api import CompileQueryRequest
@@ -54,6 +55,19 @@ def test_client_scope_field_is_not_accepted():
         pass
     else:
         raise AssertionError("client user_scope must be rejected")
+
+
+def test_canonical_scope_value_is_accepted_and_conflicts_fail_closed():
+    employee = AuthorizationScope(
+        user_id="U-001", role="Employee", scope_type="user",
+        scope_value="U-001", scope_user_id="U-001",
+    )
+    assert employee.scope_value == "U-001"
+    with pytest.raises(ValueError):
+        AuthorizationScope(
+            user_id="U-001", role="Employee", scope_type="user",
+            scope_value="U-999", scope_user_id="U-001",
+        )
 
 
 def test_employee_scope_is_preserved():

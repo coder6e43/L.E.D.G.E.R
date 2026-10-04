@@ -43,7 +43,7 @@ def test_login_query_scope_and_audit_use_trusted_identity(sample_database):
         }
     )
     assert result["status"] == "SUCCESS"
-    assert result["filters"]["cost_centre"] == user.cost_centre
+    assert result["filters"]["scope"]["cost_centre"] == user.cost_centre
 
     if result["source_rows"]:
         placeholders = ",".join("?" for _ in result["source_rows"])
@@ -76,17 +76,26 @@ def test_failed_login_clears_any_existing_identity(sample_database):
     assert get_current_user() is None
 
 
-def test_app_fails_closed_when_engine_cannot_represent_employee_scope(sample_database):
+def test_app_calculates_only_authenticated_employee_scope(sample_database):
     user = login_user(_sample_user_email("Employee"), "Password123!")
     assert user is not None
     result = run_authenticated_query({"intent": "expense_count"})
-    assert result["status"] == "SCOPE_UNSUPPORTED"
-    assert result["result"] is None
+    assert result["status"] == "SUCCESS"
+    with get_connection() as conn:
+        rows = conn.execute(
+            "SELECT user_id FROM expenses WHERE expense_id IN ({})".format(
+                ",".join("?" for _ in result["source_rows"])
+            ), result["source_rows"],
+        ).fetchall() if result["source_rows"] else []
+    assert rows and all(row["user_id"] == user.user_id for row in rows)
 
 
-def test_app_fails_closed_when_engine_cannot_represent_admin_scope(sample_database):
+def test_app_calculates_admin_organization_scope(sample_database):
     user = login_user(_sample_user_email("Admin"), "Password123!")
     assert user is not None
     result = run_authenticated_query({"intent": "expense_count"})
-    assert result["status"] == "SCOPE_UNSUPPORTED"
-    assert result["result"] is None
+    assert result["status"] == "SUCCESS"
+    assert result["filters"]["scope"]["scope_type"] == "organization"
+    with get_connection() as conn:
+        count = conn.execute("SELECT COUNT(*) FROM expenses").fetchone()[0]
+    assert result["result"] == count

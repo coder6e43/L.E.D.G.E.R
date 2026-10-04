@@ -191,4 +191,5 @@ if __name__ == "__main__":
         result = fn(path)
         print(f"\n{label}: inserted {result['inserted']} rows")
         for err in result["errors"]:
-            print(f"  ⚠ {err}")
+            # ASCII-safe for Windows terminals using the default cp1252 codec.
+            print(f"  [rejected] {err}")

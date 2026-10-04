@@ -130,7 +130,8 @@ def test_audit_contains_correct_scope(sample_database, audit_db):
 
     assert rec["scope"] == trusted_scope
     assert rec["scope"] != "CC-UNAUTHORIZED"
-    assert rec["applied_filters"]["cost_centre"] == trusted_scope
+    assert rec["applied_filters"]["scope_type"] == "cost_centre"
+    assert rec["applied_filters"]["scope_value"] == trusted_scope
 
 
 # =============================================================================
@@ -197,8 +198,7 @@ def test_audit_contains_numeric_result(sample_database, audit_db):
 # =============================================================================
 
 
-def test_access_denied_query_is_logged_appropriately(sample_database, audit_db):
-    # Employee has user scope, which calculation engine currently does not support
+def test_employee_query_is_logged_with_own_scope(sample_database, audit_db):
     user = login_user(_get_user_email("Employee"), "Password123!")
     assert user is not None
 
@@ -207,18 +207,16 @@ def test_access_denied_query_is_logged_appropriately(sample_database, audit_db):
         db_path=audit_db,
     )
 
-    assert result["status"] in {"ACCESS_DENIED", "SCOPE_UNSUPPORTED"}
-    assert result["result"] is None
+    assert result["status"] == "SUCCESS"
 
     # Verify an ACCESS_DENIED audit record was created for the authenticated user
-    records = get_recent(limit=5, db_path=audit_db)
-    assert len(records) > 0
-    rec = records[0]
+    rec = get_audit_record(result["query_id"], db_path=audit_db)
+    assert rec is not None
     assert rec["user_id"] == user.user_id
-    assert rec["execution_status"] == "ACCESS_DENIED"
-    assert rec["numeric_result"] is None
-    # Source rows must be None (never fabricated)
-    assert rec["source_row_ids"] is None
+    assert rec["execution_status"] == "SUCCESS"
+    assert rec["numeric_result"] == result["result"]
+    assert rec["scope"] == user.user_id
+    assert rec["source_row_ids"] == result["source_rows"]
 
 
 # =============================================================================

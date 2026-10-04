@@ -52,6 +52,14 @@ def q(intent, cc, **kw):
     return d
 
 
+def execute(query, cost_centre):
+    return run_calculation(query, {
+        "user_id": "TEST-MANAGER", "role": "Manager",
+        "scope_type": "cost_centre", "scope_value": cost_centre,
+        "cost_centre": cost_centre,
+    })
+
+
 SUM_CASES = [
     dict(cost_centre=T, category="Food", start="2026-09-01", end="2026-09-30"),
     dict(cost_centre=T, category="Travel", start="2026-09-01", end="2026-09-30"),
@@ -71,7 +79,7 @@ SUM_CASES = [
 @pytest.mark.parametrize("c", SUM_CASES)
 def test_sum_matches_ground_truth(use_db, c):
     exp = ground_truth(**c)
-    got = run_calculation(q("sum_expenses", c["cost_centre"],
+    got = execute(q("sum_expenses", c["cost_centre"],
                             category=c.get("category"),
                             date_range_start=c.get("start"),
                             date_range_end=c.get("end")), c["cost_centre"])
@@ -82,15 +90,15 @@ def test_sum_matches_ground_truth(use_db, c):
 
 
 def test_zero_rows_is_explicit_zero(use_db):
-    got = run_calculation(q("sum_expenses", T, date_range_start="2025-01-01",
-                            date_range_end="2025-01-31"), T)
+    got = execute(q("sum_expenses", T, date_range_start="2025-01-01",
+                    date_range_end="2025-01-31"), T)
     assert got["status"] == "SUCCESS" and got["result"] == 0
     assert got["source_rows"] == []
 
 
 def test_count_matches_ground_truth(use_db):
     exp = ground_truth(T, category="Food")
-    got = run_calculation(q("count_expenses", T, category="Food"), T)
+    got = execute(q("count_expenses", T, category="Food"), T)
     assert got["result"] == exp["row_count"]
     assert sorted(got["source_rows"]) == exp["source_row_ids"]
 
@@ -98,7 +106,7 @@ def test_count_matches_ground_truth(use_db):
 def test_category_breakdown(use_db):
     df = load_clean_expenses()
     expected = df[df["cost_centre"] == T].groupby("category")["amount"].sum().to_dict()
-    got = run_calculation(q("category_breakdown", T), T)
+    got = execute(q("category_breakdown", T), T)
     assert got["status"] == "SUCCESS"
     assert got["result"] == pytest.approx(expected)
 
@@ -108,7 +116,7 @@ def test_top_three_by_amount(use_db):
     df = df[(df["cost_centre"] == T) & (df["_date"] >= "2026-09-01")
             & (df["_date"] <= "2026-09-30")]
     expected = sorted(df["amount"].tolist(), reverse=True)[:3]
-    got = run_calculation(q("top_transactions", T, limit=3,
+    got = execute(q("top_transactions", T, limit=3,
                             date_range_start="2026-09-01",
                             date_range_end="2026-09-30"), T)
     assert [r["amount"] for r in got["result"]] == expected
@@ -117,7 +125,7 @@ def test_top_three_by_amount(use_db):
 
 def test_source_lookup_returns_exact_rows(use_db):
     exp = ground_truth(T, category="Food", start="2026-09-01", end="2026-09-30")
-    got = run_calculation(q("source_lookup", T, category="Food",
+    got = execute(q("source_lookup", T, category="Food",
                             date_range_start="2026-09-01",
                             date_range_end="2026-09-30"), T)
     assert sorted(got["source_rows"]) == exp["source_row_ids"]
@@ -131,24 +139,24 @@ BUDGET_CASES = [tuple(r) for r in BUDGETS[
 def test_remaining_budget_and_burn_rate(use_db, cc, cat, ps, pe):
     exp = budget_truth(cc, cat, ps, pe)
     base = dict(category=cat, date_range_start=ps, date_range_end=pe)
-    rem = run_calculation(q("remaining_budget", cc, **base), cc)
+    rem = execute(q("remaining_budget", cc, **base), cc)
     assert rem["status"] == "SUCCESS"
     assert rem["result"] == pytest.approx(exp["remaining"])
     assert rem["spend"] == pytest.approx(exp["spend"])
     assert sorted(rem["source_rows"]) == exp["source_row_ids"]
-    burn = run_calculation(q("burn_rate", cc, **base), cc)
+    burn = execute(q("burn_rate", cc, **base), cc)
     assert burn["result"] == pytest.approx(exp["burn_rate"], abs=0.01)
 
 
 def test_missing_budget_is_not_zero(use_db):
-    got = run_calculation(q("remaining_budget", T, category="Snacks",
-                            date_range_start="2026-09-01",
-                            date_range_end="2026-09-30"), T)
+    got = execute(q("remaining_budget", T, category="Snacks",
+                    date_range_start="2026-09-01",
+                    date_range_end="2026-09-30"), T)
     assert got["status"] == "BUDGET_NOT_FOUND"
     assert got["result"] is None and got["source_rows"] == []
 
 def test_scope_conflict_rejected(use_db):
-    got = run_calculation(q("sum_expenses", M), T)
+    got = execute(q("sum_expenses", M), T)
     assert got["status"] == "USER_SCOPE_CONFLICT"
     assert got["result"] is None and got["source_rows"] == []
 
@@ -158,22 +166,22 @@ def test_no_cross_cost_centre_leakage(use_db, cc):
     df = load_clean_expenses()
     forbidden = set(df[df["cost_centre"] != cc]["expense_id"])
     for intent in ("sum_expenses", "source_lookup", "count_expenses"):
-        got = run_calculation({"intent": intent}, cc)
+        got = execute({"intent": intent}, cc)
         assert got["source_rows"], "expected some rows for " + cc
         assert not set(got["source_rows"]) & forbidden
 
 
 def test_missing_authorized_scope_rejected(use_db):
-    assert run_calculation({"intent": "sum_expenses"}, "")["status"] == "MISSING_AUTHORIZED_SCOPE"
+    assert run_calculation({"intent": "sum_expenses"}, {})["status"] == "MISSING_AUTHORIZED_SCOPE"
 
 
 def test_invalid_date_rejected(use_db):
-    got = run_calculation(q("sum_expenses", T, date_range_start="2026-13-40"), T)
+    got = execute(q("sum_expenses", T, date_range_start="2026-13-40"), T)
     assert got["status"] == "INVALID_DATE" and got["result"] is None
 
 
 def test_unknown_intent_rejected(use_db):
-    assert run_calculation({"intent": "predict_spend"}, T)["status"] == "UNKNOWN_INTENT"
+    assert execute({"intent": "predict_spend"}, T)["status"] == "UNKNOWN_INTENT"
 
 
 def test_mixed_currency_refused_unless_filtered(use_db):
@@ -182,9 +190,9 @@ def test_mixed_currency_refused_unless_filtered(use_db):
     df = load_clean_expenses()
     inr_expected = df[(df["cost_centre"] == T) & (df["category"] == "Food")
                       & (df["currency"] == "INR")]["amount"].sum()
-    mixed = run_calculation(q("sum_expenses", T, category="Food"), T)
+    mixed = execute(q("sum_expenses", T, category="Food"), T)
     assert mixed["status"] == "MIXED_CURRENCY" and mixed["result"] is None
-    inr = run_calculation(q("sum_expenses", T, category="Food", currency="INR"), T)
+    inr = execute(q("sum_expenses", T, category="Food", currency="INR"), T)
     assert inr["status"] == "SUCCESS"
     assert inr["result"] == pytest.approx(inr_expected)
     assert "EXP-9001" not in inr["source_rows"]
