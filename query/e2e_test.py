@@ -2,6 +2,7 @@ import pandas as pd
 from pathlib import Path
 
 from compiler import compile_query, Status, Intent
+from schema import AuthorizationScope, ScopeType
 
 
 # ============================================================
@@ -113,7 +114,7 @@ def filter_expenses(query):
 
     filtered = filtered[
         filtered["cost_centre"].astype(str).str.upper()
-        == query.user_scope.upper()
+        == query.scope.cost_centre.upper()
     ]
 
     # --------------------------------------------------------
@@ -162,7 +163,7 @@ def run_query(prompt):
 
     response = compile_query(
         prompt,
-        user_scope="CC-TECH"
+        scope=AuthorizationScope(user_id="U-002", role="Manager", scope_type=ScopeType.cost_centre, cost_centre="CC-TECH")
     )
 
     print(f"Status: {response.status}")
@@ -209,7 +210,7 @@ def run_query(prompt):
         if query.category:
             print(f"Category: {query.category}")
 
-        print(f"Cost centre: {query.user_scope}")
+        print(f"Scope: {query.scope.model_dump()}")
 
         print()
         print("Source rows:")
@@ -364,7 +365,7 @@ def run_query(prompt):
 
         budget_data = budget_data[
             budget_data["cost_centre"].astype(str).str.upper()
-            == query.user_scope.upper()
+            == query.scope.cost_centre.upper()
         ]
 
         # ----------------------------------------------------
