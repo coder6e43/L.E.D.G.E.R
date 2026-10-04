@@ -404,7 +404,7 @@ def run_query(prompt):
 
         actual_expenses = actual_expenses[
             actual_expenses["cost_centre"].astype(str).str.upper()
-            == query.user_scope.upper()
+            == query.scope.cost_centre.upper()
         ]
 
         if query.category:
@@ -482,7 +482,7 @@ for prompt in compiler_tests:
 
     response = compile_query(
         prompt,
-        user_scope="CC-TECH"
+        scope=AuthorizationScope(user_id="U-002", role="Manager", scope_type=ScopeType.cost_centre, cost_centre="CC-TECH")
     )
 
     print()
