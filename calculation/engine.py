@@ -10,25 +10,65 @@ Responsibility (per INTEGRATION_CONTRACT.md, section 6):
 This module ONLY does: DATABASE -> FILTER -> FORMULA -> RESULT.
 It never performs financial arithmetic itself -- every number in a result
 comes from calculation/formulas.py. It never authenticates or authorizes a
-user -- it only accepts an already-authorized cost centre as a trusted input.
+user -- it only accepts an already-authorized SCOPE as a trusted input (see
+AUTHORIZED SCOPE below) and applies it.
 
 --------------------------------------------------------------------------
-COMPATIBILITY NOTE (auth/ is not implemented yet)
+COMPATIBILITY NOTE (this module does not import auth/)
 --------------------------------------------------------------------------
-This module does NOT import from an `auth` package, because it does not
-exist in the repository yet. It exposes one plain entry point:
+This module does NOT import from the `auth` package (auth/rbac.py). It
+exposes one plain entry point:
 
-    run_calculation(query: Mapping[str, Any], authorized_cost_centre: str) -> dict
+    run_calculation(query: Mapping[str, Any], authorized_scope: Mapping[str, Any]) -> dict
 
-`query` is now produced by the Query Compiler (query/compiler.py,
+`query` is produced by the Query Compiler (query/compiler.py,
 query/schema.py), which this module also does not import from -- it only
-reads plain fields off the `query` mapping it's handed, so it has no
-compile-time dependency on the compiler's internal types. `authorized_cost_centre`
-is still expected to come from the (future) auth/RBAC layer.
+reads plain fields off the `query` mapping it's handed. `authorized_scope`
+is the dict returned by auth.get_authorized_scope() (on
+origin/feature/auth-rbac) -- this module does not call that function
+itself, it only consumes whatever dict the caller passes in. The engine
+does not decide who is authorized for what; Auth/RBAC already made that
+decision, and the engine's only job is to apply the scope it is handed.
 
-engine.py never trusts a cost-centre-shaped value out of `query` for
-authorization -- see SECURITY below for how `query["user_scope"]` is
-handled.
+--------------------------------------------------------------------------
+AUTHORIZED SCOPE -- auth/rbac.py's ACTUAL return shapes
+--------------------------------------------------------------------------
+`authorized_scope` is expected to be exactly one of the three shapes
+auth.get_authorized_scope() returns (field names match auth/rbac.py, not a
+generic "scope_value"):
+
+    Employee:
+        {"user_id": ..., "role": "Employee",
+         "scope_type": "user", "scope_user_id": "<id>"}
+
+    Manager:
+        {"user_id": ..., "role": "Manager",
+         "scope_type": "cost_centre", "cost_centre": "<cc>"}
+
+    Admin:
+        {"user_id": ..., "role": "Admin",
+         "scope_type": "organization"}
+
+This module reads only "scope_type" plus the one field each scope_type
+requires ("scope_user_id" for user, "cost_centre" for cost_centre, nothing
+extra for organization). The "user_id" and "role" fields are ignored --
+the engine does not re-derive or second-guess the authorization decision
+from them; `scope_type` plus its one required field is the complete,
+already-authorized instruction for how to filter the database:
+
+    scope_type == "user"         -> expenses WHERE user_id = scope_user_id
+    scope_type == "cost_centre"  -> expenses WHERE cost_centre = cost_centre
+    scope_type == "organization" -> expenses: no additional restriction
+                                     (the whole organization's expenses are
+                                     in scope; NOT a fake cost_centre "ALL")
+
+Budgets are a narrower case: database/models.py's `budgets` table is
+cost-centre based only (no user or organization dimension). See BUDGET
+SCOPE below for how each scope_type is handled for remaining_budget/
+burn_rate.
+
+run_calculation() fails closed on anything that doesn't match one of the
+three shapes above -- see SCOPE VALIDATION below.
 
 --------------------------------------------------------------------------
 STRUCTURED QUERY -- LATEST QUERY COMPILER CONTRACT
@@ -36,8 +76,9 @@ STRUCTURED QUERY -- LATEST QUERY COMPILER CONTRACT
 The Query Compiler's query object contains:
 
     intent              (str, required)      -- see SUPPORTED_INTENTS below
-    user_scope           (str, optional)     -- see SECURITY below; NEVER
-                                                 used to filter the database
+    user_scope           (str, optional)     -- see QUERY SCOPE SECURITY
+                                                 below; NEVER used to filter
+                                                 the database
     category              (str, optional)
     date_range_start      (date, optional)   -- python datetime.date (or an
                                                  already-formatted
@@ -64,11 +105,11 @@ The Query Compiler uses exactly these six intent names:
     remaining_budget       -> calculate_remaining_budget()
     source_lookup            -> direct filtered lookup of matching expense
                                  records (no formula math involved; pure
-                                 evidence retrieval) -- NOTE: this intent no
-                                 longer takes an expense_ids list (the
-                                 compiler schema has none); it uses the same
-                                 filters as every other intent (category,
-                                 date_range_start/end, currency).
+                                 evidence retrieval) -- this intent takes no
+                                 expense_ids list (the compiler schema has
+                                 none); it uses the same filters as every
+                                 other intent (category, date_range_start/
+                                 end, currency).
 
 burn_rate (-> calculate_burn_rate()) is kept as an additional, non-compiler
 engine capability: it is not one of the six names the compiler emits, but
@@ -87,6 +128,9 @@ Every result from run_calculation() keeps these three keys. Additional
 metadata keys (status, formula, filters, row_count, budget_id, ...) are
 appended without removing or renaming the core three, so contract-compatible
 callers that only read result/currency/source_rows keep working unchanged.
+`filters["scope"]` now reports the resolved, trusted scope dict that was
+actually applied (see _build_filters), rather than a "cost_centre" key that
+wouldn't make sense for user/organization scope.
 
 CURRENCY FIELD: this engine performs NO currency conversion (per the schema
 and ingestion contract, there is no exchange-rate field anywhere). If the
@@ -125,19 +169,72 @@ result=None, source_rows=[], plus "status" and "error" describing why:
      "source_rows": [], "error": "..."}
 
 --------------------------------------------------------------------------
-SECURITY
+SCOPE VALIDATION (fail closed)
 --------------------------------------------------------------------------
-Every SQL statement filters expenses/budgets by `cost_centre = ?` using the
-authorized_cost_centre argument, via parameterized SQL (never string
-interpolation). No query in this file EVER uses `query["user_scope"]` (or
-any other query field) to filter the database.
+run_calculation() validates `authorized_scope` before doing anything else:
 
-`user_scope`, when the compiler supplies it, is used for exactly one thing:
-a consistency check against the trusted `authorized_cost_centre`. If
-`user_scope` is present and does not equal `authorized_cost_centre`, the
-whole request is rejected with a USER_SCOPE_CONFLICT failure before any
-intent-specific logic runs -- the query is never allowed to silently access
-a different cost centre than the one RBAC authorized.
+    missing / not a mapping / empty        -> MISSING_AUTHORIZED_SCOPE
+    scope_type missing or not one of
+      "user" / "cost_centre" / "organization" -> INVALID_SCOPE_TYPE
+    scope_type == "user" but no (non-empty,
+      string) scope_user_id                -> MISSING_SCOPE_USER_ID
+    scope_type == "cost_centre" but no
+      (non-empty, string) cost_centre      -> MISSING_COST_CENTRE
+
+This module does NOT implement role-based authorization rules (it does not
+decide that an "Employee" gets user scope, or that a "Manager" gets
+cost_centre scope -- Auth/RBAC already decided that). It only validates
+that the scope dict it was handed is well-formed and applies it.
+
+--------------------------------------------------------------------------
+QUERY SCOPE SECURITY
+--------------------------------------------------------------------------
+Every SQL statement filters expenses/budgets using ONLY the trusted
+`authorized_scope` (via _scope_where_clause / _require_cost_centre_budget_scope),
+through parameterized SQL (never string interpolation). No query in this
+file EVER uses `query["user_scope"]`, `query["user_id"]`, or any other
+query-supplied field to filter the database.
+
+`query["user_scope"]`, when the compiler supplies it, is used for exactly
+one thing: a consistency check against the trusted `authorized_scope`. The
+trusted scope always wins; a conflicting query is rejected rather than
+widened or narrowed:
+
+    authorized_scope scope_type == "user"
+        -> query user_scope, if present, must equal scope_user_id
+    authorized_scope scope_type == "cost_centre"
+        -> query user_scope, if present, must equal cost_centre
+    authorized_scope scope_type == "organization"
+        -> ANY query user_scope value is rejected outright -- an
+           organization-wide authorization must never be narrowed or
+           replaced by an untrusted query-supplied scope
+
+A mismatch (or any user_scope at all under organization scope) is rejected
+with USER_SCOPE_CONFLICT before any intent-specific logic runs. Fields like
+`query["user_id"]` are never read by this module at all -- there is nothing
+for them to override, by construction, not by a special-cased check.
+
+--------------------------------------------------------------------------
+BUDGET SCOPE
+--------------------------------------------------------------------------
+database/models.py's `budgets` table is cost-centre based only:
+
+    budget_id, cost_centre, category, amount, period_start, period_end
+
+There is no user-level or organization-level budget dimension. So for
+remaining_budget/burn_rate:
+
+    scope_type == "cost_centre" -> budget lookup uses the trusted
+                                     cost_centre, exactly as before.
+    scope_type == "user"         -> BUDGET_SCOPE_UNSUPPORTED. This file does
+                                     NOT invent a user-level budget.
+    scope_type == "organization" -> BUDGET_SCOPE_UNSUPPORTED. This file does
+                                     NOT invent an organization-wide budget
+                                     and does NOT treat a fake cost_centre
+                                     "ALL" as real. If the schema is later
+                                     extended with an organization-level
+                                     budget concept, this is where that
+                                     would be wired in -- not before.
 
 --------------------------------------------------------------------------
 DATE HANDLING
@@ -148,11 +245,11 @@ expense dates as 'YYYY-MM-DD' strings. _normalize_date() converts a date to
 that representation before it is ever used -- always as a bound SQL
 parameter, never interpolated into the SQL text. As a defensive fallback it
 also accepts a plain string, but does NOT trust it blindly: the string must
-parse as a real, strictly 'YYYY-MM-DD' formatted calendar date (via
-datetime.strptime, which also catches impossible dates such as
-'2026-02-30'). Any other type, a malformed string, or a string that isn't
-an actual date is rejected with a clean INVALID_DATE failure rather than
-letting a bad value reach SQL.
+first match _DATE_STRING_RE (^\\d{4}-\\d{2}-\\d{2}$) exactly, then parse as a
+real calendar date via datetime.strptime (which also catches impossible
+dates such as '2026-02-30'). Any other type, a malformed string, or a
+string that isn't an actual date is rejected with a clean INVALID_DATE
+failure rather than letting a bad value reach SQL.
 
 --------------------------------------------------------------------------
 CATEGORY VALUES (e.g. "Snacks")
@@ -205,6 +302,10 @@ DEFAULT_TOP_TRANSACTIONS_LIMIT = 5
 # datetime.strptime() in _normalize_date() -- see that function's docstring.
 _DATE_STRING_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
+# The three scope_type values auth/rbac.py's get_authorized_scope() can
+# return (see AUTHORIZED SCOPE in the module docstring).
+_SCOPE_TYPES = {"user", "cost_centre", "organization"}
+
 
 class EngineError(Exception):
     """
@@ -224,7 +325,7 @@ class EngineError(Exception):
 # Public entry point
 # --------------------------------------------------------------------------
 
-def run_calculation(query: Mapping[str, Any], authorized_cost_centre: str) -> Dict[str, Any]:
+def run_calculation(query: Mapping[str, Any], authorized_scope: Mapping[str, Any]) -> Dict[str, Any]:
     """
     Run one calculation-engine operation.
 
@@ -233,37 +334,30 @@ def run_calculation(query: Mapping[str, Any], authorized_cost_centre: str) -> Di
             contain "intent" (see SUPPORTED_INTENTS). May contain
             "user_scope", "category", "date_range_start", "date_range_end",
             "limit" (top_transactions only) and "currency".
-        authorized_cost_centre: the cost centre the caller is authorized
-            for, resolved by the (future) auth/RBAC layer. This is the ONLY
-            source of the security scope used to filter the database.
+        authorized_scope: the trusted scope dict returned by
+            auth.get_authorized_scope() -- see AUTHORIZED SCOPE in the
+            module docstring for its three possible shapes. This is the
+            ONLY source of the security scope used to filter the database.
             `query["user_scope"]`, if present, is checked for consistency
-            against this value but never used to filter -- see SECURITY in
-            the module docstring.
+            against this value but never used to filter -- see QUERY SCOPE
+            SECURITY in the module docstring.
 
     Returns:
         A result dict. Always contains "status", "result", "currency" and
         "source_rows". See the RESULT CONTRACT section of the module
         docstring for the full shape and failure statuses.
     """
-    if not authorized_cost_centre or not isinstance(authorized_cost_centre, str):
-        return _failure(
-            "MISSING_AUTHORIZED_SCOPE",
-            "authorized_cost_centre is required and must be a non-empty string.",
-        )
-
     if not isinstance(query, Mapping):
         return _failure("INVALID_QUERY", "query must be a mapping (e.g. a dict).")
 
-    # Security check runs before intent validation/dispatch: a user_scope
-    # that conflicts with the trusted authorized_cost_centre must be
-    # rejected outright, regardless of what intent was requested.
-    user_scope = query.get("user_scope")
-    if user_scope is not None and user_scope != authorized_cost_centre:
-        return _failure(
-            "USER_SCOPE_CONFLICT",
-            f"query user_scope {user_scope!r} does not match the authorized "
-            f"cost centre {authorized_cost_centre!r}; request rejected.",
-        )
+    # Scope validation and the query-scope conflict check both run before
+    # intent validation/dispatch: the engine fails closed on a malformed or
+    # conflicting scope regardless of what intent was requested.
+    try:
+        scope = _validate_scope(authorized_scope)
+        _check_query_scope_conflict(query, scope)
+    except EngineError as exc:
+        return _failure(exc.status, exc.message)
 
     intent = query.get("intent")
     if intent not in _ALL_INTENTS:
@@ -274,7 +368,7 @@ def run_calculation(query: Mapping[str, Any], authorized_cost_centre: str) -> Di
 
     try:
         with get_connection() as conn:
-            return _dispatch(intent, conn, query, authorized_cost_centre)
+            return _dispatch(intent, conn, query, scope)
     except EngineError as exc:
         return _failure(exc.status, exc.message)
     except (ValueError, TypeError) as exc:
@@ -290,26 +384,163 @@ def _dispatch(
     intent: str,
     conn: sqlite3.Connection,
     query: Mapping[str, Any],
-    authorized_cost_centre: str,
+    scope: Dict[str, Any],
 ) -> Dict[str, Any]:
     """Route to the handler for one intent. Assumes intent is already valid."""
     if intent == "sum_expenses":
-        return _handle_sum_expenses(conn, query, authorized_cost_centre)
+        return _handle_sum_expenses(conn, query, scope)
     if intent == "category_breakdown":
-        return _handle_category_breakdown(conn, query, authorized_cost_centre)
+        return _handle_category_breakdown(conn, query, scope)
     if intent == "count_expenses":
-        return _handle_count_expenses(conn, query, authorized_cost_centre)
+        return _handle_count_expenses(conn, query, scope)
     if intent == "top_transactions":
-        return _handle_top_transactions(conn, query, authorized_cost_centre)
+        return _handle_top_transactions(conn, query, scope)
     if intent == "remaining_budget":
-        return _handle_remaining_budget(conn, query, authorized_cost_centre)
+        return _handle_remaining_budget(conn, query, scope)
     if intent == "burn_rate":
-        return _handle_burn_rate(conn, query, authorized_cost_centre)
+        return _handle_burn_rate(conn, query, scope)
     if intent == "source_lookup":
-        return _handle_source_lookup(conn, query, authorized_cost_centre)
+        return _handle_source_lookup(conn, query, scope)
     # Unreachable: run_calculation() already validated intent against
     # _ALL_INTENTS before calling _dispatch().
     raise EngineError("UNKNOWN_INTENT", f"Unsupported intent: {intent!r}")
+
+
+# --------------------------------------------------------------------------
+# Scope validation and application (AUTH BOUNDARY)
+# --------------------------------------------------------------------------
+
+def _validate_scope(authorized_scope: Any) -> Dict[str, Any]:
+    """
+    Validate the trusted authorized_scope dict handed to run_calculation()
+    (the dict shape auth.get_authorized_scope() returns -- see AUTHORIZED
+    SCOPE in the module docstring). Fails closed: raises EngineError on any
+    problem rather than guessing or defaulting to a wide scope.
+
+    Returns a normalized dict containing only the fields this module
+    actually uses:
+        {"scope_type": "user", "scope_user_id": "..."}
+        {"scope_type": "cost_centre", "cost_centre": "..."}
+        {"scope_type": "organization"}
+
+    Extra fields on the input (user_id, role, ...) are read nowhere in this
+    module -- they are simply not copied into the returned dict.
+    """
+    if not authorized_scope or not isinstance(authorized_scope, Mapping):
+        raise EngineError(
+            "MISSING_AUTHORIZED_SCOPE",
+            "authorized_scope is required and must be a non-empty mapping "
+            "(the dict returned by auth.get_authorized_scope()).",
+        )
+
+    scope_type = authorized_scope.get("scope_type")
+    if scope_type not in _SCOPE_TYPES:
+        raise EngineError(
+            "INVALID_SCOPE_TYPE",
+            f"authorized_scope['scope_type'] must be one of {sorted(_SCOPE_TYPES)}, got {scope_type!r}.",
+        )
+
+    if scope_type == "user":
+        scope_user_id = authorized_scope.get("scope_user_id")
+        if not scope_user_id or not isinstance(scope_user_id, str):
+            raise EngineError(
+                "MISSING_SCOPE_USER_ID",
+                "authorized_scope['scope_user_id'] is required and must be a "
+                "non-empty string when scope_type is 'user'.",
+            )
+        return {"scope_type": "user", "scope_user_id": scope_user_id}
+
+    if scope_type == "cost_centre":
+        cost_centre = authorized_scope.get("cost_centre")
+        if not cost_centre or not isinstance(cost_centre, str):
+            raise EngineError(
+                "MISSING_COST_CENTRE",
+                "authorized_scope['cost_centre'] is required and must be a "
+                "non-empty string when scope_type is 'cost_centre'.",
+            )
+        return {"scope_type": "cost_centre", "cost_centre": cost_centre}
+
+    # scope_type == "organization": no additional field required.
+    return {"scope_type": "organization"}
+
+
+def _check_query_scope_conflict(query: Mapping[str, Any], scope: Dict[str, Any]) -> None:
+    """
+    Reject the request if query['user_scope'] (untrusted, Query-Compiler-
+    supplied) conflicts with the trusted `scope`. Never uses
+    query['user_scope'] to filter anything -- it only decides whether to
+    refuse the request. See QUERY SCOPE SECURITY in the module docstring.
+    """
+    query_user_scope = query.get("user_scope")
+    if query_user_scope is None:
+        return
+
+    scope_type = scope["scope_type"]
+    if scope_type == "organization":
+        # An organization-wide authorization must never be narrowed or
+        # replaced by an untrusted query-supplied scope -- any value here
+        # is rejected outright, not just a mismatching one.
+        raise EngineError(
+            "USER_SCOPE_CONFLICT",
+            "query user_scope must not be supplied when authorized_scope is "
+            "organization-wide; request rejected.",
+        )
+
+    trusted_value = scope["scope_user_id"] if scope_type == "user" else scope["cost_centre"]
+    if query_user_scope != trusted_value:
+        raise EngineError(
+            "USER_SCOPE_CONFLICT",
+            f"query user_scope {query_user_scope!r} does not match the authorized scope; request rejected.",
+        )
+
+
+def _scope_where_clause(scope: Dict[str, Any]) -> tuple:
+    """
+    Build the trusted scope's restriction on the `expenses` table as a
+    (sql_fragment, params) pair, always parameterized:
+
+        user scope         -> (" AND user_id = ?", [scope_user_id])
+        cost_centre scope   -> (" AND cost_centre = ?", [cost_centre])
+        organization scope   -> ("", []) -- no artificial restriction; the
+                                 whole organization's expenses are in scope
+
+    The scope value is never interpolated into SQL text.
+    """
+    scope_type = scope["scope_type"]
+    if scope_type == "user":
+        return " AND user_id = ?", [scope["scope_user_id"]]
+    if scope_type == "cost_centre":
+        return " AND cost_centre = ?", [scope["cost_centre"]]
+    return "", []
+
+
+def _require_cost_centre_budget_scope(scope: Dict[str, Any], purpose: str) -> str:
+    """
+    Budgets are defined per cost_centre only (database/models.py's budgets
+    table has no user or organization dimension). Only a cost_centre scope
+    (Manager) can resolve a budget deterministically from the existing
+    schema, so this returns the trusted cost_centre string for that case.
+    For any other scope_type it raises a clear BUDGET_SCOPE_UNSUPPORTED
+    EngineError explaining exactly why -- it never invents a user-level or
+    organization-level budget, and never uses a fake cost_centre like "ALL".
+    """
+    scope_type = scope["scope_type"]
+    if scope_type == "cost_centre":
+        return scope["cost_centre"]
+    if scope_type == "user":
+        raise EngineError(
+            "BUDGET_SCOPE_UNSUPPORTED",
+            f"Cannot compute {purpose}: budgets are tracked per cost centre in "
+            "the existing schema, not per user; a user-scoped authorization "
+            "cannot resolve a budget.",
+        )
+    # organization
+    raise EngineError(
+        "BUDGET_SCOPE_UNSUPPORTED",
+        f"Cannot compute {purpose}: the existing schema has no organization-wide "
+        "budget (budgets are cost-centre based); an organization-wide budget "
+        "cannot be safely determined without inventing one.",
+    )
 
 
 # --------------------------------------------------------------------------
@@ -381,21 +612,23 @@ def _extract_filters(query: Mapping[str, Any]) -> tuple:
 
 def _fetch_expenses(
     conn: sqlite3.Connection,
-    authorized_cost_centre: str,
+    scope: Dict[str, Any],
     category: Optional[str] = None,
     date_start: Optional[str] = None,
     date_end: Optional[str] = None,
     currency: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     """
-    Retrieve expense rows for the authorized cost centre, with optional
-    filters, and convert them from sqlite3.Row to plain dict (required by
-    calculation/formulas.py). Date range is inclusive on both ends. All
-    filter values (category/date_start/date_end/currency) must already be
-    plain strings -- callers normalize dates via _normalize_date() first.
+    Retrieve expense rows restricted by the trusted `scope` (see
+    _scope_where_clause), with optional filters, and convert them from
+    sqlite3.Row to plain dict (required by calculation/formulas.py). Date
+    range is inclusive on both ends. All filter values (category/
+    date_start/date_end/currency) must already be plain strings -- callers
+    normalize dates via _normalize_date() first.
     """
-    sql = "SELECT * FROM expenses WHERE cost_centre = ?"
-    params: List[Any] = [authorized_cost_centre]
+    scope_sql, scope_params = _scope_where_clause(scope)
+    sql = "SELECT * FROM expenses WHERE 1=1" + scope_sql
+    params: List[Any] = list(scope_params)
 
     if category is not None:
         sql += " AND category = ?"
@@ -416,14 +649,17 @@ def _fetch_expenses(
 
 def _fetch_budget(
     conn: sqlite3.Connection,
-    authorized_cost_centre: str,
+    cost_centre: str,
     category: Optional[str],
     date_start: Optional[str],
     date_end: Optional[str],
     purpose: str = "remaining budget",
 ) -> Dict[str, Any]:
     """
-    Locate the single applicable budget row for the authorized cost centre.
+    Locate the single applicable budget row for `cost_centre` (already
+    resolved from the trusted scope by _require_cost_centre_budget_scope --
+    budgets are cost-centre based only, so this never takes a scope dict
+    directly).
 
     `category` is REQUIRED: budgets are stored per (cost_centre, category),
     so a budget cannot be identified without one.
@@ -448,7 +684,7 @@ def _fetch_budget(
         )
 
     sql = "SELECT * FROM budgets WHERE cost_centre = ? AND category = ?"
-    params: List[Any] = [authorized_cost_centre, category]
+    params: List[Any] = [cost_centre, category]
     if date_start is not None:
         sql += " AND period_start = ?"
         params.append(date_start)
@@ -469,7 +705,7 @@ def _fetch_budget(
     if len(budgets) > 1:
         raise EngineError(
             "AMBIGUOUS_BUDGET",
-            f"{len(budgets)} budgets match cost_centre={authorized_cost_centre!r}, "
+            f"{len(budgets)} budgets match cost_centre={cost_centre!r}, "
             f"category={category!r}; specify date_range_start/date_range_end to select exactly one period.",
         )
     return budgets[0]
@@ -512,15 +748,20 @@ def _resolve_currency(records: Sequence[Dict[str, Any]], requested_currency: Opt
 # --------------------------------------------------------------------------
 
 def _build_filters(
-    authorized_cost_centre: str,
+    scope: Dict[str, Any],
     category: Optional[str] = None,
     date_start: Optional[str] = None,
     date_end: Optional[str] = None,
     currency: Optional[str] = None,
     limit: Optional[int] = None,
 ) -> Dict[str, Any]:
-    """Build a human-readable record of which filters were actually applied."""
-    filters: Dict[str, Any] = {"cost_centre": authorized_cost_centre}
+    """
+    Build a human-readable record of which filters were actually applied.
+    "scope" reports the resolved, trusted scope dict (scope_type plus its
+    one required field) rather than a "cost_centre" key, since that
+    wouldn't make sense for user/organization scope.
+    """
+    filters: Dict[str, Any] = {"scope": dict(scope)}
     if category is not None:
         filters["category"] = category
     if date_start is not None or date_end is not None:
@@ -567,11 +808,11 @@ def _failure(status: str, message: str, **extra: Any) -> Dict[str, Any]:
 # --------------------------------------------------------------------------
 
 def _handle_sum_expenses(
-    conn: sqlite3.Connection, query: Mapping[str, Any], authorized_cost_centre: str
+    conn: sqlite3.Connection, query: Mapping[str, Any], scope: Dict[str, Any]
 ) -> Dict[str, Any]:
     category, date_start, date_end, currency = _extract_filters(query)
 
-    expenses = _fetch_expenses(conn, authorized_cost_centre, category, date_start, date_end, currency)
+    expenses = _fetch_expenses(conn, scope, category, date_start, date_end, currency)
 
     # Validate currency compatibility BEFORE any financial math. A SUM across
     # mixed currencies would be a real number that is mathematically wrong,
@@ -586,17 +827,17 @@ def _handle_sum_expenses(
         source_rows=source_rows,
         currency=resolved_currency,
         formula="SUM(amount)",
-        filters=_build_filters(authorized_cost_centre, category, date_start, date_end, currency),
+        filters=_build_filters(scope, category, date_start, date_end, currency),
         row_count=len(expenses),
     )
 
 
 def _handle_category_breakdown(
-    conn: sqlite3.Connection, query: Mapping[str, Any], authorized_cost_centre: str
+    conn: sqlite3.Connection, query: Mapping[str, Any], scope: Dict[str, Any]
 ) -> Dict[str, Any]:
     category, date_start, date_end, currency = _extract_filters(query)
 
-    expenses = _fetch_expenses(conn, authorized_cost_centre, category, date_start, date_end, currency)
+    expenses = _fetch_expenses(conn, scope, category, date_start, date_end, currency)
 
     # Validate currency compatibility BEFORE any financial math -- a
     # per-category SUM across mixed currencies would be mathematically
@@ -611,17 +852,17 @@ def _handle_category_breakdown(
         source_rows=source_rows,
         currency=resolved_currency,
         formula="SUM(amount) GROUP BY category",
-        filters=_build_filters(authorized_cost_centre, category, date_start, date_end, currency),
+        filters=_build_filters(scope, category, date_start, date_end, currency),
         row_count=len(expenses),
     )
 
 
 def _handle_count_expenses(
-    conn: sqlite3.Connection, query: Mapping[str, Any], authorized_cost_centre: str
+    conn: sqlite3.Connection, query: Mapping[str, Any], scope: Dict[str, Any]
 ) -> Dict[str, Any]:
     category, date_start, date_end, currency = _extract_filters(query)
 
-    expenses = _fetch_expenses(conn, authorized_cost_centre, category, date_start, date_end, currency)
+    expenses = _fetch_expenses(conn, scope, category, date_start, date_end, currency)
     count = calculate_expense_count(expenses)
     source_rows = [e["expense_id"] for e in expenses]
 
@@ -633,18 +874,18 @@ def _handle_count_expenses(
         currency=currency,
         source_rows=source_rows,
         formula="COUNT(*)",
-        filters=_build_filters(authorized_cost_centre, category, date_start, date_end, currency),
+        filters=_build_filters(scope, category, date_start, date_end, currency),
         row_count=count,
     )
 
 
 def _handle_top_transactions(
-    conn: sqlite3.Connection, query: Mapping[str, Any], authorized_cost_centre: str
+    conn: sqlite3.Connection, query: Mapping[str, Any], scope: Dict[str, Any]
 ) -> Dict[str, Any]:
     category, date_start, date_end, currency = _extract_filters(query)
     limit = query.get("limit", DEFAULT_TOP_TRANSACTIONS_LIMIT)  # formulas.py validates this
 
-    expenses = _fetch_expenses(conn, authorized_cost_centre, category, date_start, date_end, currency)
+    expenses = _fetch_expenses(conn, scope, category, date_start, date_end, currency)
 
     # Validate currency compatibility BEFORE ranking. "Top N by amount"
     # across mixed currencies would rank a USD figure against an INR figure
@@ -662,30 +903,38 @@ def _handle_top_transactions(
         source_rows=source_rows,
         currency=resolved_currency,
         formula=f"TOP {limit} BY amount DESC",
-        filters=_build_filters(authorized_cost_centre, category, date_start, date_end, currency, limit),
+        filters=_build_filters(scope, category, date_start, date_end, currency, limit),
         row_count=len(expenses),
     )
 
 
 def _handle_remaining_budget(
-    conn: sqlite3.Connection, query: Mapping[str, Any], authorized_cost_centre: str
+    conn: sqlite3.Connection, query: Mapping[str, Any], scope: Dict[str, Any]
 ) -> Dict[str, Any]:
     category, date_start, date_end, currency = _extract_filters(query)
+
+    # Budgets are cost-centre based only -- raises BUDGET_SCOPE_UNSUPPORTED
+    # for user/organization scope rather than inventing a budget (see
+    # BUDGET SCOPE in the module docstring).
+    cost_centre = _require_cost_centre_budget_scope(scope, purpose="remaining budget")
 
     # Never invents a budget -- raises BUDGET_NOT_FOUND / AMBIGUOUS_BUDGET
     # via EngineError, caught by run_calculation(). Message names the
     # missing category explicitly, e.g.:
     #   "Cannot compute remaining budget: no budget allocated for Snacks"
     budget = _fetch_budget(
-        conn, authorized_cost_centre, category, date_start, date_end, purpose="remaining budget"
+        conn, cost_centre, category, date_start, date_end, purpose="remaining budget"
     )
 
     # "Remaining budget" means what's left of THIS budget's own period, so
     # spend is measured over budget["period_start"]..budget["period_end"],
     # not any caller-supplied range (which was only used to pick the budget).
+    # `scope` here is the same cost_centre scope the budget was resolved
+    # from, so the expense restriction and the budget's cost centre always
+    # agree -- there is no separate "which cost centre's expenses" question.
     expenses = _fetch_expenses(
         conn,
-        authorized_cost_centre,
+        scope,
         category,
         date_start=budget["period_start"],
         date_end=budget["period_end"],
@@ -713,7 +962,7 @@ def _handle_remaining_budget(
         budget_currency=None,
         formula="budget_amount - SUM(amount)",
         filters=_build_filters(
-            authorized_cost_centre, category, budget["period_start"], budget["period_end"], currency
+            scope, category, budget["period_start"], budget["period_end"], currency
         ),
         row_count=len(expenses),
         budget_id=budget["budget_id"],
@@ -723,22 +972,24 @@ def _handle_remaining_budget(
 
 
 def _handle_burn_rate(
-    conn: sqlite3.Connection, query: Mapping[str, Any], authorized_cost_centre: str
+    conn: sqlite3.Connection, query: Mapping[str, Any], scope: Dict[str, Any]
 ) -> Dict[str, Any]:
     """
     Extra, non-compiler engine capability (see module docstring). Not one of
     the six Query Compiler intents, but kept available and consistent with
-    remaining_budget's currency/missing-budget handling.
+    remaining_budget's scope/currency/missing-budget handling.
     """
     category, date_start, date_end, currency = _extract_filters(query)
 
+    cost_centre = _require_cost_centre_budget_scope(scope, purpose="burn rate")
+
     budget = _fetch_budget(
-        conn, authorized_cost_centre, category, date_start, date_end, purpose="burn rate"
+        conn, cost_centre, category, date_start, date_end, purpose="burn rate"
     )
 
     expenses = _fetch_expenses(
         conn,
-        authorized_cost_centre,
+        scope,
         category,
         date_start=budget["period_start"],
         date_end=budget["period_end"],
@@ -770,7 +1021,7 @@ def _handle_burn_rate(
         budget_currency=None,
         formula="(SUM(amount) / budget_amount) * 100",
         filters=_build_filters(
-            authorized_cost_centre, category, budget["period_start"], budget["period_end"], currency
+            scope, category, budget["period_start"], budget["period_end"], currency
         ),
         row_count=len(expenses),
         budget_id=budget["budget_id"],
@@ -780,17 +1031,16 @@ def _handle_burn_rate(
 
 
 def _handle_source_lookup(
-    conn: sqlite3.Connection, query: Mapping[str, Any], authorized_cost_centre: str
+    conn: sqlite3.Connection, query: Mapping[str, Any], scope: Dict[str, Any]
 ) -> Dict[str, Any]:
     """
-    Filtered source-row lookup/retrieval. Per the latest Query Compiler
-    contract this intent no longer takes an expense_ids list (the compiler
-    schema has none) -- it uses the same filters as every other intent
-    (category, date_range_start/end, currency), constrained to
-    authorized_cost_centre exactly like _fetch_expenses(). Returns the
-    matching expense records as "result" and their expense_id values as
-    "source_rows". Records from another cost centre can never be returned,
-    since the query is scoped by authorized_cost_centre like every other
+    Filtered source-row lookup/retrieval. This intent takes no expense_ids
+    list (the compiler schema has none) -- it uses the same filters as
+    every other intent (category, date_range_start/end, currency),
+    restricted to the trusted `scope` exactly like _fetch_expenses().
+    Returns the matching expense records as "result" and their expense_id
+    values as "source_rows". Records outside the authorized scope can never
+    be returned, since the query is scoped the same way as every other
     handler in this file.
 
     If an explicit currency is supplied, it is applied as a real SQL filter
@@ -803,7 +1053,7 @@ def _handle_source_lookup(
     """
     category, date_start, date_end, currency = _extract_filters(query)
 
-    records = _fetch_expenses(conn, authorized_cost_centre, category, date_start, date_end, currency)
+    records = _fetch_expenses(conn, scope, category, date_start, date_end, currency)
 
     # Validate currency compatibility before returning results as a single
     # currency-labeled set, for the same reason as the other monetary/
@@ -816,6 +1066,6 @@ def _handle_source_lookup(
         source_rows=source_rows,
         currency=resolved_currency,
         formula="SELECT * (authorized, filtered)",
-        filters=_build_filters(authorized_cost_centre, category, date_start, date_end, currency),
+        filters=_build_filters(scope, category, date_start, date_end, currency),
         row_count=len(records),
     )
