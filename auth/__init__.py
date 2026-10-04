@@ -1,6 +1,6 @@
 """Authentication, request session, and authorization helpers for LEDGER."""
 
-from auth.authentication import AuthenticatedUser, authenticate_user
+from auth.authentication import AuthenticatedUser, authenticate_user, load_session_user
 from auth.rbac import (
     AuthorizationError,
     authorize_cost_centre,
@@ -28,6 +28,7 @@ __all__ = [
     "AuthenticatedUser",
     "AuthorizationError",
     "authenticate_user",
+    "load_session_user",
     "authorize_cost_centre",
     "authorize_cost_centre_access_management",
     "authorize_expense_creation",

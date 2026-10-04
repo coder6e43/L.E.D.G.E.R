@@ -1,5 +1,7 @@
 """Fail-closed role and cost-centre authorization helpers for LEDGER."""
 
+from __future__ import annotations
+
 from types import MappingProxyType
 from typing import Mapping
 

@@ -110,6 +110,26 @@ def authenticate_user(email: str, password: str) -> AuthenticatedUser | None:
     return AuthenticatedUser._from_database(row)
 
 
+def load_session_user(user_id: str) -> AuthenticatedUser | None:
+    """Reload a user's current safe identity for a verified session cookie.
+
+    The caller must obtain ``user_id`` from the backend-signed session. Role
+    and cost-centre values are always refreshed from the database rather than
+    accepted from cookie contents.
+    """
+    if not isinstance(user_id, str) or not user_id.strip():
+        return None
+    with get_connection() as conn:
+        row = conn.execute(
+            """SELECT user_id, name, email, role, cost_centre
+               FROM users WHERE user_id = ?""",
+            (user_id,),
+        ).fetchone()
+    if row is None or row["role"] not in VALID_ROLES:
+        return None
+    return AuthenticatedUser._from_database(row)
+
+
 def _verify_against_dummy(password_bytes: bytes) -> None:
     """Spend bcrypt verification work without exposing account existence."""
     bcrypt.checkpw(password_bytes, _DUMMY_PASSWORD_HASH)

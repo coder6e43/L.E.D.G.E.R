@@ -9,7 +9,7 @@ from .schema import AuthorizationScope, ScopeType
 # FILE PATHS
 # ============================================================
 
-BASE_DIR = Path(r"C:\Users\niket\OneDrive\Desktop\hexa nova hackthon")
+BASE_DIR = Path(__file__).resolve().parent.parent / "data"
 
 EXPENSES_FILE = BASE_DIR / "sample_expenses.csv"
 BUDGETS_FILE = BASE_DIR / "sample_budgets.csv"

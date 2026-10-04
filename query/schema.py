@@ -51,6 +51,7 @@ class AuthorizationScope(BaseModel):
     user_id: str
     role: str
     scope_type: ScopeType
+    scope_value: Optional[str] = None
     scope_user_id: Optional[str] = None
     cost_centre: Optional[str] = None
 
@@ -59,16 +60,22 @@ class AuthorizationScope(BaseModel):
         if self.scope_type == ScopeType.user:
             if not self.scope_user_id:
                 raise ValueError("user scope requires scope_user_id")
+            if self.scope_value is not None and self.scope_value != self.scope_user_id:
+                raise ValueError("scope_value must match scope_user_id")
             if self.cost_centre is not None:
                 raise ValueError("user scope must not contain cost_centre")
         elif self.scope_type == ScopeType.cost_centre:
             if not self.cost_centre:
                 raise ValueError("cost_centre scope requires cost_centre")
+            if self.scope_value is not None and self.scope_value != self.cost_centre:
+                raise ValueError("scope_value must match cost_centre")
             if self.scope_user_id is not None:
                 raise ValueError("cost_centre scope must not contain scope_user_id")
         elif self.scope_type == ScopeType.organization:
             if self.scope_user_id is not None or self.cost_centre is not None:
                 raise ValueError("organization scope must not be narrowed to a user or cost centre")
+            if self.scope_value is not None and self.scope_value != "organization":
+                raise ValueError("scope_value must remain organization-wide")
         return self
 
 
