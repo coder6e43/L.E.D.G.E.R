@@ -13,6 +13,7 @@ from collections.abc import Mapping
 from datetime import datetime
 from typing import Any
 
+from fastapi import FastAPI
 from audit.logger import log_query
 from auth.authentication import AuthenticatedUser, authenticate_user
 from auth.rbac import get_authorized_scope, has_permission
@@ -23,6 +24,10 @@ from auth.session import (
 )
 from calculation.engine import SUPPORTED_INTENTS, run_calculation
 from database.ingestion import ALLOWED_CATEGORIES, ALLOWED_CURRENCIES
+from query.api import router as query_router
+
+app = FastAPI(title="LEDGER API")
+app.include_router(query_router)
 
 _AUDIT_QUERY_FIELDS = ("intent", "category", "date_start", "date_end", "currency", "top_n")
 
