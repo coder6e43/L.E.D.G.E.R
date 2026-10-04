@@ -110,7 +110,7 @@ def test_scope_does_not_convert_organization_to_cost_centre():
     assert result.query.scope.cost_centre is None
 
 
-def test_api_uses_trusted_scope_and_ignores_no_client_scope():
+def test_api_rejects_client_scope_override():
     app = FastAPI()
     app.include_router(api.router)
     trusted = manager_scope()
