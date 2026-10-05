@@ -1,28 +1,28 @@
 import { Icon } from "../common/Icon";
+import type { QueryResult } from "../../services/api";
 
-export function ResultCard() {
-  return (
-    <section className="result-card">
-      <div className="result-top">
-        <div>
-          <p className="result-label"><span><Icon name="check" size={14} /></span> Financial result</p>
-          <p className="answered-query">How much did I spend on food this month?</p>
-        </div>
-        <span className="result-status"><Icon name="shield" size={15} /> Supported by source data</span>
+export function ResultCard({ prompt, result }: { prompt: string; result: QueryResult }) {
+  const empty = (result.row_count ?? result.source_rows.length) === 0 && result.formula !== "COUNT(*)";
+  return <section className="result-card">
+    <div className="result-top"><div><p className="result-label"><span><Icon name={empty ? "info" : "check"} size={14} /></span>{empty ? "No matching records" : "Financial result"}</p><p className="answered-query">{prompt}</p></div>
+      <span className="result-status"><Icon name="shield" size={15} /> Authenticated data scope</span></div>
+    <div className="result-main"><div className="answer"><span>{empty ? "Matching expenses" : result.formula === "COUNT(*)" ? "Expense count" : "Calculated result"}</span>
+      <strong>{empty ? "No matches" : formatValue(result.result, result.currency, result.formula)}</strong>
+      <small>{empty ? "No records matched the requested filters in your authorized scope." : `${result.row_count ?? result.source_rows.length} source row(s) · ${result.formula ?? "Calculation"}`}</small></div>
+      <div className="result-divider" /><div className="answer-context">
+        <div><span className="context-icon"><Icon name="receipt" size={19} /></span><span><small>Evidence rows</small><strong>{result.row_count ?? result.source_rows.length}</strong></span></div>
+        <div><span className="context-icon"><Icon name="shield" size={19} /></span><span><small>Audit reference</small><strong>{result.query_id ?? "Unavailable"}</strong></span></div>
       </div>
-      <div className="result-main">
-        <div className="answer">
-          <span>Total spending</span>
-          <strong>₹12,450</strong>
-          <small>for September 2026</small>
-        </div>
-        <div className="result-divider" />
-        <div className="answer-context">
-          <div><span className="context-icon"><Icon name="food" size={19} /></span><span><small>Category</small><strong>Food & Dining</strong></span></div>
-          <div><span className="context-icon"><Icon name="calendar" size={19} /></span><span><small>Date range</small><strong>Sep 1 – Sep 30, 2026</strong></span></div>
-          <div><span className="context-icon"><Icon name="receipt" size={19} /></span><span><small>Evidence</small><strong>37 transactions</strong></span></div>
-        </div>
-      </div>
-    </section>
-  );
+    </div>
+  </section>;
+}
+
+export function formatValue(value: unknown, currency: string | null, formula?: string) {
+  if (typeof value === "number") {
+    if (formula === "COUNT(*)") return new Intl.NumberFormat("en-IN", { maximumFractionDigits: 0 }).format(value);
+    if (currency) return new Intl.NumberFormat("en-IN", { style: "currency", currency }).format(value);
+    return new Intl.NumberFormat("en-IN").format(value);
+  }
+  if (Array.isArray(value)) return `${value.length} matching record(s)`;
+  return value == null ? "No result" : typeof value === "object" ? JSON.stringify(value) : String(value);
 }

@@ -2,9 +2,8 @@ import { useState } from "react";
 import type { FormEvent } from "react";
 import { Icon } from "../common/Icon";
 import { Button } from "../common/Button";
-import { examples } from "../../data/mockData";
 
-export function QueryBox({ query, setQuery, submit, loading }: { query: string; setQuery: (value: string) => void; submit: () => void; loading: boolean }) {
+export function QueryBox({ query, setQuery, submit, loading, examples }: { query: string; setQuery: (value: string) => void; submit: () => void; loading: boolean; examples: string[] }) {
   const [validation, setValidation] = useState(false);
   function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -32,7 +31,7 @@ export function QueryBox({ query, setQuery, submit, loading }: { query: string; 
         <Button className="primary" type="submit" disabled={loading}>{loading ? "Analyzing…" : <>Ask question <Icon name="arrow" size={18} /></>}</Button>
       </form>
       {validation && <p className="validation"><Icon name="warning" size={15} /> Enter a financial question to continue.</p>}
-      <div className="suggestions"><span>Try asking</span>{examples.slice(0, 3).map((example) => <Button key={example} className="suggestion" onClick={() => setQuery(example)}>{example}</Button>)}</div>
+      <div className="suggestions"><span>Try asking</span>{examples.map((example) => <Button key={example} className="suggestion" onClick={() => setQuery(example)}>{example}</Button>)}</div>
     </section>
   );
 }

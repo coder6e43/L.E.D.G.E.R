@@ -21,7 +21,7 @@ export function Login({ onLogin }: LoginProps) {
       <label className="field"><span>Email</span><input type="email" autoComplete="username" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@example.com" /></label>
       <label className="field"><span>Password</span><input type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Enter your password" /></label>
       <button className="primary full ledger-login-button" type="submit" disabled={busy}>{busy ? "Signing in…" : "Sign in to LEDGER"}</button>
-      <p className="prototype-note">Use a database-backed demo account. Accounts cannot be created from this screen.</p>
+      <p className="prototype-note">Sign in with your database-backed account. Access is verified by the LEDGER API.</p>
     </form></section>
   </main>;
 }

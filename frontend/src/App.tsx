@@ -1,10 +1,14 @@
 import { useEffect, useState } from "react";
-import { Brand } from "./components/common/Brand";
 import { Login } from "./components/auth/Login";
+import { Header } from "./components/dashboard/Header";
+import { QueryBox } from "./components/dashboard/QueryBox";
+import { ResultCard } from "./components/dashboard/ResultCard";
+import { ContextPanel } from "./components/dashboard/ContextPanel";
+import { CalculationPanel } from "./components/dashboard/CalculationPanel";
+import { SourceRowsTable } from "./components/dashboard/SourceRowsTable";
 import { currentUser, executeQuery, login, logout, type LedgerUser, type QueryResult } from "./services/api";
-import "./ledger.css";
+import "./index.css";
 
-// Compatibility export for the inactive prototype landing components.
 export function useTheme() { return { theme: "light" as "light" | "dark", toggleTheme: () => undefined }; }
 
 export default function App() {
@@ -14,58 +18,62 @@ export default function App() {
   const [result, setResult] = useState<QueryResult | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [theme, setTheme] = useState<"light" | "dark">("light");
 
   useEffect(() => { currentUser().then(setUser).catch(() => setUser(null)).finally(() => setChecking(false)); }, []);
 
   async function ask(question = prompt) {
-    if (!question.trim()) return;
+    if (!question.trim() || busy) return;
     setPrompt(question);
     setError("");
+    setResult(null);
     setBusy(true);
     try { setResult(await executeQuery(question)); }
-    catch (e) { setResult(null); setError(e instanceof Error ? e.message : "The query could not be completed."); }
-    finally { setBusy(false); }
+    catch (cause) {
+      setError(cause instanceof Error ? cause.message : "The query could not be completed.");
+    } finally { setBusy(false); }
   }
 
-  async function signOut() { await logout(); setUser(null); setResult(null); setPrompt(""); }
+  async function signOut() {
+    try { await logout(); } finally { setUser(null); setResult(null); setPrompt(""); }
+  }
 
-  if (checking) return <main className="ledger-wait">Loading secure workspace…</main>;
-  if (!user) return <Login onLogin={async (email, password) => { try { setUser(await login(email, password)); return true; } catch { return false; } }} />;
+  if (checking) return <main className="dashboard" aria-live="polite">Loading secure workspace…</main>;
+  if (!user) return <Login onLogin={async (email, password) => {
+    try { setUser(await login(email, password)); return true; }
+    catch { return false; }
+  }} />;
+
   const examples = user.role === "Employee"
-    ? ["How many expenses did I submit in 2026?", "How much did I spend on Travel this year?", "Show my top 5 expenses this month."]
-    : ["How much did we spend on Food in September 2026?", "Show our top 5 Travel expenses this month.", "How many Food expenses did we submit this month?"];
+    ? ["How many expenses did I submit in 2026?", "How much did I spend on Travel in August 2026?", "Show my Travel transactions this month."]
+    : user.role === "Manager"
+      ? ["How much did we spend on Food in September 2026?", "How much did we spend on Travel in September 2026?", "Show our top 3 Travel expenses this month."]
+      : ["How much did the organization spend on Food in September 2026?", "How much did we spend on Travel in September 2026?", "How many expenses did the organization submit in 2026?"];
 
-  return <div className="ledger-app">
-    <header className="ledger-header"><Brand /><div className="ledger-identity"><span>{user.name}</span><small>{user.role} · {user.cost_centre}</small><button onClick={signOut}>Sign out</button></div></header>
-    <main className="ledger-main">
-      <p className="ledger-kicker">L.E.D.G.E.R. · Evidence-backed finance</p>
-      <h1>Ask your financial data.</h1>
-      <p className="ledger-subtitle">Answers are calculated from authorized database records and linked to their source rows.</p>
-      <form className="ledger-query" onSubmit={(e) => { e.preventDefault(); void ask(); }}>
-        <label htmlFor="prompt">What would you like to know?</label>
-        <textarea id="prompt" value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder="How much did I spend on Food this month?" rows={3} />
-        <button disabled={busy || !prompt.trim()}>{busy ? "Calculating…" : "Ask LEDGER"}</button>
-      </form>
-      <div className="ledger-examples"><span>Try:</span>{examples.map((x) => <button key={x} onClick={() => void ask(x)} disabled={busy}>{x}</button>)}</div>
-      {error && <p className="ledger-error" role="alert">{error}</p>}
-      {result && <section className="ledger-result" aria-live="polite">
-        <div className="ledger-result-head"><div><p className="ledger-kicker">{result.status === "SUCCESS" ? "Verified result" : result.status}</p><h2>{result.status === "SUCCESS" ? formatResult(result.result, result.currency, result.formula) : result.message || result.error || "The query needs clarification."}</h2></div><span>{result.query_id ? `Audit ${result.query_id}` : ""}</span></div>
-        {result.status === "SUCCESS" && <>
-          <p className="ledger-meta">{result.formula || "Calculation"} · {result.row_count ?? result.source_rows.length} source row(s)</p>
-          {result.source_rows.length > 0 && <details open><summary>Evidence · {result.source_rows.length} authorized source row ID(s)</summary><div className="ledger-table-wrap"><table><thead><tr><th>Expense ID</th></tr></thead><tbody>{result.source_rows.map((row) => <tr key={row}><td>{row}</td></tr>)}</tbody></table></div></details>}
-          {result.source_rows.length === 0 && <p className="ledger-meta">No matching source rows.</p>}
-        </>}
+  return <div className="app-shell" data-theme={theme}>
+    <Header user={user} onLogout={() => void signOut()} theme={theme} onTheme={() => setTheme((current) => current === "light" ? "dark" : "light")} />
+    <main className="dashboard">
+      <section className="welcome">
+        <div><p className="section-kicker">L.E.D.G.E.R. · Evidence-backed finance</p><h1>Ask your financial data.</h1><p>Results are calculated from database records within your authenticated access scope.</p></div>
+        <div className="workspace-status"><span className="status-dot" /> Connected to the secure workspace</div>
+      </section>
+      <QueryBox query={prompt} setQuery={setPrompt} submit={() => void ask()} loading={busy} examples={examples} />
+      {busy && <section className="panel" aria-live="polite" style={{ padding: 24, marginTop: 20 }}>Compiling your question and calculating from authorized records…</section>}
+      {error && <section className="state-card state-error" role="alert" style={{ marginTop: 20 }}><div className="state-content"><p className="state-eyebrow">Request failed</p><h3>Unable to complete the query</h3><p>{error}</p></div></section>}
+      {result && <section className="analytics-workspace" aria-live="polite">
+        {result.status === "SUCCESS" ? <>
+          <ResultCard prompt={prompt} result={result} />
+          <ContextPanel filters={result.filters ?? {}} user={user} />
+          <CalculationPanel result={result} />
+          <SourceRowsTable sourceRows={result.source_rows ?? []} queryId={result.query_id} />
+        </> : <section className={`state-card state-${result.status.toLowerCase()}`}>
+          <div className="state-content"><p className="state-eyebrow">{result.status === "REFUSED" ? "Unable to answer" : result.status === "ACCESS_DENIED" ? "Access denied" : "Query needs attention"}</p>
+            <h3>{result.message || result.error || "The query could not be completed."}</h3>
+            {result.query_id && <p>Audit reference: {result.query_id}</p>}
+          </div>
+        </section>}
       </section>}
-      <p className="ledger-scope-note">Your role and data scope come from your authenticated account. Request-supplied identity and scope fields are rejected.</p>
+      <p className="prototype-note">Identity and data scope are supplied by the authenticated backend session. The browser sends only your question.</p>
     </main>
   </div>;
-}
-
-function formatResult(value: unknown, currency: string | null, formula?: string): string {
-  if (typeof value === "number") {
-    if (formula === "COUNT(*)") return new Intl.NumberFormat("en-IN", { maximumFractionDigits: 0 }).format(value);
-    return currency ? new Intl.NumberFormat("en-IN", { style: "currency", currency }).format(value) : new Intl.NumberFormat("en-IN").format(value);
-  }
-  if (Array.isArray(value)) return `${value.length} matching record(s)`;
-  return typeof value === "object" && value ? JSON.stringify(value) : String(value ?? "No result");
 }

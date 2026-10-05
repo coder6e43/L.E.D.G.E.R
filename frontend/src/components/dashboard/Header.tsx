@@ -1,17 +1,20 @@
 import { Icon } from "../common/Icon";
 import { Button } from "../common/Button";
 import { Brand } from "../common/Brand";
+import type { LedgerUser } from "../../services/api";
 
 type HeaderProps = {
   onLogout: () => void;
   theme: "light" | "dark";
   onTheme: () => void;
+  user: LedgerUser;
 };
 
 export function Header({
   onLogout,
   theme,
   onTheme,
+  user,
 }: HeaderProps) {
   return (
     <header className="app-header">
@@ -26,10 +29,6 @@ export function Header({
         </nav>
 
         <div className="header-actions">
-          <span className="mock-badge">
-            Mock data
-          </span>
-
           <Button
             className="theme-toggle"
             onClick={onTheme}
@@ -57,15 +56,11 @@ export function Header({
           </Button>
 
           <div className="user-block">
-            <span className="avatar">
-              AK
-            </span>
+          <span className="avatar">{user.name.split(/\s+/).map((part) => part[0]).slice(0, 2).join("").toUpperCase()}</span>
 
             <span>
-              <strong>Alex Kumar</strong>
-              <small>
-                Personal workspace
-              </small>
+              <strong>{user.name}</strong>
+              <small>{user.role} · {user.cost_centre}</small>
             </span>
           </div>
 

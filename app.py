@@ -62,7 +62,7 @@ async def establish_request_auth_context(request: Request):
 
 
 _configured_origins = os.environ.get(
-    "LEDGER_CORS_ORIGINS", "http://localhost:5173"
+    "LEDGER_CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173"
 )
 _allowed_origins = [origin.strip() for origin in _configured_origins.split(",") if origin.strip()]
 _configured_session_secret = os.environ.get("LEDGER_SESSION_SECRET")

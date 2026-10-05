@@ -6,7 +6,7 @@
 - Node.js 22.12 or newer (Vite 8 requirement) and npm
 - PowerShell on Windows
 
-Run commands from the repository root unless noted. The API is `http://localhost:8000`; Vite is `http://localhost:5173`.
+Run commands from the repository root unless noted. The API is `http://127.0.0.1:8000`; Vite is `http://127.0.0.1:5173`.
 
 For the stabilized integration checkout, use `integration/final-demo-ready`. The frontend displays COUNT results as whole counts using the backend's `COUNT(*)` formula metadata; monetary results continue to use the backend currency metadata.
 
@@ -28,7 +28,7 @@ Copy `frontend/.env.example` to `frontend/.env.local` if you need a different AP
 
 ```powershell
 $env:LEDGER_DB_PATH = "data/demo_ledger.db"
-$env:LEDGER_CORS_ORIGINS = "http://localhost:5173"
+$env:LEDGER_CORS_ORIGINS = "http://localhost:5173,http://127.0.0.1:5173"
 $env:LEDGER_COOKIE_SECURE = "false"
 $env:LEDGER_SESSION_SECRET = (python -c "import secrets; print(secrets.token_urlsafe(32))")
 python -m uvicorn app:app --host 127.0.0.1 --port 8000
@@ -42,7 +42,7 @@ npm ci
 npm run dev -- --host 127.0.0.1 --port 5173
 ```
 
-Open [http://localhost:5173](http://localhost:5173). Health endpoint: [http://localhost:8000/health](http://localhost:8000/health). The session cookie contains only a signed user ID; the role and cost centre are reloaded from SQLite for every API request. Use HTTPS and set `LEDGER_COOKIE_SECURE=true` outside local HTTP demos.
+Open [http://127.0.0.1:5173](http://127.0.0.1:5173). Health endpoint: [http://127.0.0.1:8000/health](http://127.0.0.1:8000/health). The session cookie contains only a signed user ID; the role and cost centre are reloaded from SQLite for every API request. Use HTTPS and set `LEDGER_COOKIE_SECURE=true` outside local HTTP demos.
 
 ## Demo accounts and queries
 
@@ -59,6 +59,7 @@ Use a sample Employee for own-expense queries, a Manager for cost-centre queries
 - `How much did I spend on Food this month?`
 - `Show my top 5 Travel expenses this month.`
 - `How many Food expenses did I submit this month?`
+- `How much did I spend on Travel in August 2026?` (the sample employee has no authorized Travel rows in August; the UI reports no matches rather than implying spend)
 
 Manager/Admin may also ask `How much did we spend on Food this month?`. Budget questions are limited to cost-centre budget scope; Employee and organization-level budgets are unsupported because the budget table has no corresponding dimensions.
 
@@ -77,7 +78,7 @@ With the checked-in sample data, the Employee 2026 expense-count query returns `
 ## Troubleshooting
 
 - If login returns 401, confirm ingestion completed and that the email is copied exactly from `data/sample_users.csv` with the development password above.
-- If browser API requests fail, check that both servers are running, that `VITE_API_BASE_URL` is `http://localhost:8000`, and that `LEDGER_CORS_ORIGINS` matches the exact browser origin.
+- If browser API requests fail, check that both servers are running, that `VITE_API_BASE_URL` is `http://127.0.0.1:8000`, and that `LEDGER_CORS_ORIGINS` includes the exact browser origin (`http://127.0.0.1:5173` or `http://localhost:5173`).
 - If a port is busy, change the Vite/backend port and update CORS plus `frontend/.env.local` accordingly.
 - If SQLite reports missing tables, rerun `python -m database.ingestion` using the same `LEDGER_DB_PATH` used by the backend.
 - `npm run build` compiles TypeScript and creates the production frontend bundle in `frontend/dist`.
