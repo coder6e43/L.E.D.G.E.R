@@ -9,11 +9,11 @@ from .schema import AuthorizationScope, ScopeType
 # FILE PATHS
 # ============================================================
 
-BASE_DIR = Path(r"C:\Users\niket\OneDrive\Desktop\hexa nova hackthon")
+DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 
-EXPENSES_FILE = BASE_DIR / "sample_expenses.csv"
-BUDGETS_FILE = BASE_DIR / "sample_budgets.csv"
-USERS_FILE = BASE_DIR / "sample_users.csv"
+EXPENSES_FILE = DATA_DIR / "sample_expenses.csv"
+BUDGETS_FILE = DATA_DIR / "sample_budgets.csv"
+USERS_FILE = DATA_DIR / "sample_users.csv"
 
 
 # ============================================================
@@ -109,13 +109,22 @@ def filter_expenses(query):
     filtered = expenses.copy()
 
     # --------------------------------------------------------
-    # USER / COST CENTRE SECURITY FILTER
+    # TRUSTED AUTHORIZATION SCOPE FILTER
     # --------------------------------------------------------
 
-    filtered = filtered[
-        filtered["cost_centre"].astype(str).str.upper()
-        == query.scope.cost_centre.upper()
-    ]
+    if query.scope.scope_type == ScopeType.user:
+        filtered = filtered[
+            filtered["user_id"].astype(str)
+            == str(query.scope.scope_user_id)
+        ]
+    elif query.scope.scope_type == ScopeType.cost_centre:
+        filtered = filtered[
+            filtered["cost_centre"].astype(str).str.upper()
+            == str(query.scope.cost_centre).upper()
+        ]
+    elif query.scope.scope_type == ScopeType.organization:
+        # Organization scope intentionally applies no narrower filter.
+        pass
 
     # --------------------------------------------------------
     # CATEGORY FILTER
@@ -163,7 +172,12 @@ def run_query(prompt):
 
     response = compile_query(
         prompt,
-        scope=AuthorizationScope(user_id="U-002", role="Manager", scope_type=ScopeType.cost_centre, cost_centre="CC-TECH")
+        scope=AuthorizationScope(
+            user_id="U-002",
+            role="Manager",
+            scope_type=ScopeType.cost_centre,
+            cost_centre="CC-TECH",
+        ),
     )
 
     print(f"Status: {response.status}")
@@ -482,7 +496,12 @@ for prompt in compiler_tests:
 
     response = compile_query(
         prompt,
-        scope=AuthorizationScope(user_id="U-002", role="Manager", scope_type=ScopeType.cost_centre, cost_centre="CC-TECH")
+        scope=AuthorizationScope(
+            user_id="U-002",
+            role="Manager",
+            scope_type=ScopeType.cost_centre,
+            cost_centre="CC-TECH",
+        ),
     )
 
     print()
