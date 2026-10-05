@@ -217,3 +217,9 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 data/*.db
+frontend/node_modules/
+frontend/dist/
+frontend/.env.local
+frontend/tsconfig.tsbuildinfo
+__pycache__/
+*.py[cod]
