@@ -24,6 +24,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, ConfigDict
 
 from audit.api import router as audit_router
+from admin.api import router as admin_router
+from analytics.api import router as analytics_router
 from audit.logger import DEFAULT_DB, log_query
 from auth.authentication import (
     GENERIC_AUTHENTICATION_ERROR,
@@ -31,6 +33,7 @@ from auth.authentication import (
     authenticate_user,
     load_session_user,
 )
+from auth.google_oauth import google_callback, google_login_redirect, google_oauth_configured
 from auth.rbac import AuthorizationError, get_authorized_scope, has_permission
 from auth.session import (
     get_current_user,
@@ -39,6 +42,7 @@ from auth.session import (
 )
 from calculation.engine import SUPPORTED_INTENTS, run_calculation
 from database.ingestion import ALLOWED_CATEGORIES, ALLOWED_CURRENCIES
+from expenses.api import router as expenses_router
 from query.api import get_trusted_scope, router as query_router
 from query.compiler import compile_query
 from query.schema import AuthorizationScope, ScopeType, Status
@@ -87,11 +91,14 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=_allowed_origins,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_methods=["GET", "POST", "PATCH", "OPTIONS"],
     allow_headers=["Content-Type"],
 )
 app.include_router(query_router)
 app.include_router(audit_router)
+app.include_router(analytics_router)
+app.include_router(admin_router)
+app.include_router(expenses_router)
 
 
 # -----------------------------------------------------------------------------
@@ -151,6 +158,21 @@ def logout_endpoint(request: Request) -> dict[str, str]:
     request.session.clear()
     logout_user()
     return {"status": "logged_out"}
+
+
+@app.get("/auth/google/status")
+def google_status_endpoint() -> dict[str, bool]:
+    return {"enabled": google_oauth_configured()}
+
+
+@app.get("/auth/google/login")
+def google_login_endpoint(request: Request):
+    return google_login_redirect(request)
+
+
+@app.get("/auth/google/callback")
+def google_callback_endpoint(request: Request, code: str, state: str):
+    return google_callback(request, code, state)
 
 
 # -----------------------------------------------------------------------------

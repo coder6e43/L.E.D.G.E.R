@@ -70,6 +70,7 @@ export type CategoryDatum = {
   name: string;
   amount: number;
   count: number;
+  currency?: string;
 };
 
 export type Theme = "light" | "dark";

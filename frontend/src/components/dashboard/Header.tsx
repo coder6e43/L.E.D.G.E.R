@@ -2,6 +2,7 @@ import { Icon } from "../common/Icon";
 import { Button } from "../common/Button";
 import { Brand } from "../common/Brand";
 import type { LedgerUser } from "../../services/api";
+import { Link, useLocation } from "react-router";
 
 type HeaderProps = {
   onLogout: () => void;
@@ -16,16 +17,18 @@ export function Header({
   onTheme,
   user,
 }: HeaderProps) {
+  const location = useLocation();
   return (
     <header className="app-header">
       <div className="header-inner">
         <Brand />
 
         <nav aria-label="Primary navigation">
-          <span className="nav-active">
+          <Link className={location.pathname === "/" ? "nav-active" : "nav-link"} to="/">
             <Icon name="grid" size={17} />
             Dashboard
-          </span>
+          </Link>
+          {user.role === "Admin" && <Link className={location.pathname === "/admin" ? "nav-active" : "nav-link"} to="/admin">Admin Portal</Link>}
         </nav>
 
         <div className="header-actions">

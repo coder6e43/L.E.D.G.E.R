@@ -1,9 +1,10 @@
 import { useState, type FormEvent } from "react";
 import { Brand } from "../common/Brand";
+import { GoogleLogo } from "../common/GoogleLogo";
 
-type LoginProps = { onLogin: (email: string, password: string) => Promise<boolean> };
+type LoginProps = { onLogin: (email: string, password: string) => Promise<boolean>; googleEnabled: boolean; onGoogle: () => void };
 
-export function Login({ onLogin }: LoginProps) {
+export function Login({ onLogin, googleEnabled, onGoogle }: LoginProps) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -21,6 +22,9 @@ export function Login({ onLogin }: LoginProps) {
       <label className="field"><span>Email</span><input type="email" autoComplete="username" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@example.com" /></label>
       <label className="field"><span>Password</span><input type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Enter your password" /></label>
       <button className="primary full ledger-login-button" type="submit" disabled={busy}>{busy ? "Signing in…" : "Sign in to LEDGER"}</button>
+      <div className="login-divider"><span>or</span></div>
+      <button className="google-login-button" type="button" onClick={onGoogle} disabled={!googleEnabled}><GoogleLogo /> Continue with Google</button>
+      {!googleEnabled && <small className="google-disabled-note">Google sign-in is unavailable until the server is configured.</small>}
       <p className="prototype-note">Sign in with your database-backed account. Access is verified by the LEDGER API.</p>
     </form></section>
   </main>;
