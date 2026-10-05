@@ -49,7 +49,7 @@ export default function App() {
       <div className="ledger-examples"><span>Try:</span>{examples.map((x) => <button key={x} onClick={() => void ask(x)} disabled={busy}>{x}</button>)}</div>
       {error && <p className="ledger-error" role="alert">{error}</p>}
       {result && <section className="ledger-result" aria-live="polite">
-        <div className="ledger-result-head"><div><p className="ledger-kicker">{result.status === "SUCCESS" ? "Verified result" : result.status}</p><h2>{result.status === "SUCCESS" ? formatResult(result.result, result.currency) : result.message || result.error || "The query needs clarification."}</h2></div><span>{result.query_id ? `Audit ${result.query_id}` : ""}</span></div>
+        <div className="ledger-result-head"><div><p className="ledger-kicker">{result.status === "SUCCESS" ? "Verified result" : result.status}</p><h2>{result.status === "SUCCESS" ? formatResult(result.result, result.currency, result.formula) : result.message || result.error || "The query needs clarification."}</h2></div><span>{result.query_id ? `Audit ${result.query_id}` : ""}</span></div>
         {result.status === "SUCCESS" && <>
           <p className="ledger-meta">{result.formula || "Calculation"} · {result.row_count ?? result.source_rows.length} source row(s)</p>
           {result.source_rows.length > 0 && <details open><summary>Evidence · {result.source_rows.length} authorized source row ID(s)</summary><div className="ledger-table-wrap"><table><thead><tr><th>Expense ID</th></tr></thead><tbody>{result.source_rows.map((row) => <tr key={row}><td>{row}</td></tr>)}</tbody></table></div></details>}
@@ -61,8 +61,11 @@ export default function App() {
   </div>;
 }
 
-function formatResult(value: unknown, currency: string | null): string {
-  if (typeof value === "number") return currency ? new Intl.NumberFormat("en-IN", { style: "currency", currency }).format(value) : new Intl.NumberFormat("en-IN").format(value);
+function formatResult(value: unknown, currency: string | null, formula?: string): string {
+  if (typeof value === "number") {
+    if (formula === "COUNT(*)") return new Intl.NumberFormat("en-IN", { maximumFractionDigits: 0 }).format(value);
+    return currency ? new Intl.NumberFormat("en-IN", { style: "currency", currency }).format(value) : new Intl.NumberFormat("en-IN").format(value);
+  }
   if (Array.isArray(value)) return `${value.length} matching record(s)`;
   return typeof value === "object" && value ? JSON.stringify(value) : String(value ?? "No result");
 }

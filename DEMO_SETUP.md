@@ -8,6 +8,8 @@
 
 Run commands from the repository root unless noted. The API is `http://localhost:8000`; Vite is `http://localhost:5173`.
 
+For the stabilized integration checkout, use `integration/final-demo-ready`. The frontend displays COUNT results as whole counts using the backend's `COUNT(*)` formula metadata; monetary results continue to use the backend currency metadata.
+
 ## Install and initialize
 
 ```powershell
