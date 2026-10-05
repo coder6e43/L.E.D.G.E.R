@@ -28,7 +28,15 @@ export function AnalyticsOverview({ data, onAsk }: { data: Overview; onAsk: (pro
           {points.map((value, index) => <div className="monthly-column" key={months[index]} title={`${months[index]}: ${formatMoney(value, activeCurrency)}`}><span className="monthly-value">{value ? formatMoney(value, activeCurrency, true) : ""}</span><i style={{ height: `${value > 0 ? Math.max(3, value / max * 100) : 0}%` }} /><small>{months[index].slice(5)}</small></div>)}
         </div> : <p className="analytics-empty">No expenses are recorded for this currency in the displayed period.</p>}
       </section>
-      <SpendingCategories categories={categories} selected={selected} onSelect={setSelected} onView={() => onAsk(`How much did I spend on ${selected || categories[0]?.name || "Food"} this year?`)} />
+      <SpendingCategories categories={categories} selected={selected} onSelect={setSelected} onView={() => {
+        const category = selected || categories[0]?.name || "Food";
+        const question = data.scope.scope_type === "organization"
+          ? `How much did the organization spend on ${category} this year?`
+          : data.scope.scope_type === "cost_centre"
+            ? `How much did we spend on ${category} this year?`
+            : `How much did I spend on ${category} this year?`;
+        onAsk(question);
+      }} />
     </div>
     {!data.budget_comparison.available && <p className="analytics-note">Budget comparison unavailable: {data.budget_comparison.reason}</p>}
   </section>;

@@ -34,6 +34,7 @@ def test_analytics_is_available_and_admin_api_is_role_protected(sample_database)
     manager, manager_account = _client_for("Manager")
     manager_overview = manager.get("/analytics/overview").json()
     assert manager_overview["scope"]["scope_type"] == "cost_centre"
+    assert manager.get("/admin/users").status_code == 403
     with get_connection() as conn:
         expected_manager_count = conn.execute(
             "SELECT COUNT(*) AS count FROM expenses WHERE cost_centre = ?",
@@ -66,6 +67,9 @@ def test_admin_creates_and_updates_database_backed_user(sample_database):
     assert client.patch(f"/admin/users/{user['user_id']}/role", json={"role": "Manager"}).json()["role"] == "Manager"
     other_centre = next((item for item in options["cost_centres"] if item != centre), centre)
     assert client.patch(f"/admin/users/{user['user_id']}/cost-centre", json={"cost_centre": other_centre}).json()["cost_centre"] == other_centre
+    listed = client.get("/admin/users", params={"search": payload["email"]})
+    assert listed.status_code == 200 and listed.json()[0]["role"] == "Manager"
+    assert listed.json()[0]["cost_centre"] == other_centre
     with get_connection() as conn:
         row = conn.execute("SELECT role, cost_centre, password_hash FROM users WHERE user_id = ?", (user["user_id"],)).fetchone()
     assert row["role"] == "Manager" and row["cost_centre"] == other_centre
@@ -76,6 +80,7 @@ def test_admin_creates_and_updates_database_backed_user(sample_database):
 
 def test_expense_creation_uses_session_identity_and_rejects_spoofed_scope(sample_database):
     client, account = _client_for("Employee")
+    before = client.get("/analytics/overview").json()["expense_count"]
     invalid = client.post("/expenses", json={"category": "Food", "amount": 42, "currency": "INR", "date": "2026-09-01", "user_id": "U-OTHER", "role": "Admin", "cost_centre": "Other"})
     assert invalid.status_code == 422
     created = client.post("/expenses", json={"category": "Food", "amount": 42, "currency": "INR", "date": "2026-09-01", "description": "Test expense"})
@@ -85,6 +90,7 @@ def test_expense_creation_uses_session_identity_and_rejects_spoofed_scope(sample
     with get_connection() as conn:
         row = conn.execute("SELECT user_id, cost_centre FROM expenses WHERE expense_id = ?", (created.json()["expense_id"],)).fetchone()
     assert row["user_id"] == account["user_id"] and row["cost_centre"] == account["cost_centre"]
+    assert client.get("/analytics/overview").json()["expense_count"] == before + 1
 
 
 def test_google_oauth_is_disabled_without_configuration(sample_database, monkeypatch):

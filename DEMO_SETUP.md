@@ -48,6 +48,8 @@ npm run dev -- --host 127.0.0.1 --port 5173
 
 Open [http://127.0.0.1:5173](http://127.0.0.1:5173). Health endpoint: [http://127.0.0.1:8000/health](http://127.0.0.1:8000/health). The session cookie contains only a signed user ID; the role and cost centre are reloaded from SQLite for every API request. Use HTTPS and set `LEDGER_COOKIE_SECURE=true` outside local HTTP demos.
 
+The baseline query dashboard is at `/`. Signed-in users can open `/analytics` for live monthly/category aggregates and `/expenses/new` to create an expense. Admins can open `/admin`; the backend independently checks the signed session and RBAC permissions.
+
 Google sign-in is disabled unless a client ID, client secret, and exact callback URI are configured with Google. OAuth links only verified Google emails to an account already provisioned in the LEDGER users table; it does not create accounts or assign roles. Register the callback URI with Google. With no credentials, the UI keeps the Google button disabled and `/auth/google/login` returns 503.
 
 ## Demo accounts and queries

@@ -18,17 +18,20 @@ export function Header({
   user,
 }: HeaderProps) {
   const location = useLocation();
+  const isAdmin = user.role === "Admin";
   return (
     <header className="app-header">
       <div className="header-inner">
         <Brand />
 
-        <nav aria-label="Primary navigation">
+        <nav className={isAdmin ? "primary-nav has-admin" : "primary-nav"} aria-label="Primary navigation">
           <Link className={location.pathname === "/" ? "nav-active" : "nav-link"} to="/">
             <Icon name="grid" size={17} />
             Dashboard
           </Link>
-          {user.role === "Admin" && <Link className={location.pathname === "/admin" ? "nav-active" : "nav-link"} to="/admin">Admin Portal</Link>}
+          <Link className={location.pathname === "/analytics" ? "nav-active" : "nav-link"} to="/analytics">Analytics</Link>
+          <Link className={location.pathname === "/expenses/new" ? "nav-active" : "nav-link"} to="/expenses/new">Add Expense</Link>
+          {isAdmin && <Link className={`nav-admin-link ${location.pathname === "/admin" ? "nav-active" : "nav-link"}`} to="/admin">Admin Portal</Link>}
         </nav>
 
         <div className="header-actions">

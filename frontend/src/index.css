@@ -613,7 +613,7 @@ td:last-child { font-weight: 700; }
   .result-main { grid-template-columns: 1fr; gap: 24px; }
   .result-divider { width: 100%; height: 1px; }
   .result-grid { grid-template-columns: 1fr; }
-  .mock-badge { display: none; }
+  .header-inner nav, .mock-badge { display: none; }
 }
 
 @media (max-width: 720px) {
@@ -630,8 +630,6 @@ td:last-child { font-weight: 700; }
   .header-actions { gap: 8px; }
   .button.theme-toggle { padding: 0 9px; }
   .theme-toggle > small { display: none; }
-  .header-inner nav { margin-left: auto; }
-  .header-inner nav a:first-child { display: none; }
   .dashboard { padding: 30px 16px 56px; }
   .welcome { align-items: flex-start; }
   .welcome h1 { font-size: 27px; }
@@ -1101,41 +1099,44 @@ td small { font-size: 12px; }
 }
 
 [data-theme="dark"] .landing-nav nav.open { background: #151B23; border-color: #29313D; }
-/* Live analytics, expense entry, and admin screens */
-.nav-link, .nav-active { display: inline-flex; align-items: center; gap: 8px; text-decoration: none; color: var(--muted); padding: 9px 12px; border-radius: 10px; }
-.nav-active { color: var(--ink); background: var(--soft); }
-.real-analytics { margin: 24px 0; }
-.analytics-heading, .panel-heading { display: flex; justify-content: space-between; align-items: center; gap: 18px; }
-.analytics-heading h2 { margin: 4px 0; }
-.real-summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px; margin: 16px 0; }
+
+/* Additive navigation and standalone Admin, analytics, and expense views */
+.primary-nav .nav-link { display: flex; align-items: center; gap: 8px; color: var(--muted); text-decoration: none; border-bottom: 2px solid transparent; font-weight: 600; font-size: 14px; padding: 0 8px; }
+.primary-nav .nav-link:hover { color: var(--green); }
+.primary-nav .nav-active { display: flex; align-items: center; gap: 8px; padding: 0 8px; text-decoration: none; }
+.compact-field { display: grid; gap: 7px; color: var(--muted); font-size: 12px; font-weight: 600; }
+.compact-field select { min-height: 38px; border: 1px solid var(--line-strong); border-radius: var(--radius-control); background: var(--paper); color: var(--ink); padding: 0 10px; }
+.admin-page { display: grid; gap: 18px; }
+.admin-page .welcome { margin-bottom: 0; }
+.admin-summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px; }
 .real-summary { padding: 18px; display: grid; gap: 7px; }
-.real-summary small, .real-summary span { color: var(--muted); }
+.real-summary small, .real-summary span, .analytics-empty, .analytics-note { color: var(--muted); }
 .real-summary strong { font-size: 24px; }
+.analytics-heading, .admin-page .panel-heading { display: flex; justify-content: space-between; align-items: center; gap: 18px; }
 .real-analytics-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
 .monthly-panel, .categories-panel, .add-expense-panel, .admin-create, .admin-directory { padding: 20px; }
 .monthly-chart { min-height: 210px; display: flex; align-items: end; gap: 7px; padding: 18px 4px 0; }
 .monthly-column { min-width: 0; flex: 1; height: 180px; display: flex; flex-direction: column; align-items: center; justify-content: end; gap: 6px; }
 .monthly-column i { width: min(100%, 32px); min-height: 0; border-radius: 7px 7px 2px 2px; background: linear-gradient(180deg, #4b86e8, #7d63d8); }
 .monthly-column small, .monthly-value { font-size: 10px; color: var(--muted); white-space: nowrap; }
-.analytics-empty, .analytics-note { color: var(--muted); padding: 12px 0; }
+.analytics-empty, .analytics-note { padding: 12px 0; }
 .analytics-note { font-size: 13px; }
 .expense-form, .admin-user-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; align-items: end; }
 .expense-description { grid-column: span 2; }
+.expense-form select, .admin-user-form select, .admin-filters select, .admin-table select { width: 100%; min-height: 40px; border: 1px solid var(--line-strong); border-radius: var(--radius-control); padding: 0 10px; background: var(--paper); color: var(--ink); }
 .expense-submit { min-height: 44px; }
-.expense-success { color: #16834c; background: #eaf7ef; padding: 10px 14px; border-radius: 10px; }
-.admin-page { display: grid; gap: 18px; }
-.admin-page .welcome { margin-bottom: 0; }
-.admin-summary-grid { margin: 0; }
+.expense-success { color: var(--green); background: var(--green-soft); padding: 10px 14px; border-radius: 10px; }
 .admin-filters { display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 12px; margin: 14px 0; }
 .admin-table { width: 100%; border-collapse: collapse; text-align: left; }
 .admin-table th, .admin-table td { border-bottom: 1px solid var(--line); padding: 12px 10px; }
 .admin-table td:first-child { display: grid; gap: 4px; }
 .admin-table td small { color: var(--muted); }
-.admin-table select, .admin-filters input, .admin-filters select, .expense-form input, .expense-form select, .admin-user-form input, .admin-user-form select { width: 100%; min-height: 40px; }
-.google-login-button { width: 100%; display: flex; justify-content: center; align-items: center; gap: 10px; border: 1px solid var(--line); border-radius: 10px; background: white; padding: 12px; color: #333; font-weight: 600; cursor: pointer; }
+.google-login-button { width: 100%; display: flex; justify-content: center; align-items: center; gap: 10px; border: 1px solid var(--line-strong); border-radius: var(--radius-control); background: var(--paper); padding: 12px; color: var(--ink); font-weight: 600; cursor: pointer; }
 .google-login-button:disabled { cursor: not-allowed; opacity: .5; }
 .google-login-button svg { width: 18px; height: 18px; }
 .google-disabled-note { display: block; text-align: center; color: var(--muted); margin-top: 8px; }
 .login-divider { display: flex; align-items: center; gap: 12px; color: var(--muted); margin: 14px 0; }
 .login-divider::before, .login-divider::after { content: ""; height: 1px; flex: 1; background: var(--line); }
+@media (max-width: 960px) { .primary-nav.has-admin { display: flex; margin-left: auto; } }
 @media (max-width: 800px) { .real-analytics-grid { grid-template-columns: 1fr; } .admin-filters { grid-template-columns: 1fr; } .expense-description { grid-column: auto; } .admin-table { min-width: 720px; } }
+@media (max-width: 720px) { .primary-nav { display: none; } .primary-nav.has-admin { display: flex; } .primary-nav.has-admin > a:not(.nav-admin-link) { display: none; } }
