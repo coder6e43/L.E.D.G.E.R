@@ -613,7 +613,7 @@ td:last-child { font-weight: 700; }
   .result-main { grid-template-columns: 1fr; gap: 24px; }
   .result-divider { width: 100%; height: 1px; }
   .result-grid { grid-template-columns: 1fr; }
-  .header-inner nav, .mock-badge { display: none; }
+  .mock-badge { display: none; }
 }
 
 @media (max-width: 720px) {
@@ -630,6 +630,8 @@ td:last-child { font-weight: 700; }
   .header-actions { gap: 8px; }
   .button.theme-toggle { padding: 0 9px; }
   .theme-toggle > small { display: none; }
+  .header-inner nav { margin-left: auto; }
+  .header-inner nav a:first-child { display: none; }
   .dashboard { padding: 30px 16px 56px; }
   .welcome { align-items: flex-start; }
   .welcome h1 { font-size: 27px; }
