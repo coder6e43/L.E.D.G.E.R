@@ -8,11 +8,11 @@ frontend as a trusted value.
 from datetime import date
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel, ConfigDict
 
 from .compiler import compile_query
-from .schema import AuthorizationScope, CompilerResponse
+from .schema import AuthorizationScope, CompilerResponse, ScopeType
 
 router = APIRouter(prefix="/query", tags=["Query Compiler"])
 
@@ -26,22 +26,48 @@ class CompileQueryRequest(BaseModel):
     current_date: Optional[date] = None
 
 
-def get_trusted_scope() -> AuthorizationScope:
-    """Resolve scope from the host application's Auth/RBAC session.
+DEMO_USERS: dict[str, AuthorizationScope] = {
+    "U-001": AuthorizationScope(
+        user_id="U-001",
+        role="Employee",
+        scope_type=ScopeType.user,
+        scope_user_id="U-001",
+    ),
+    "U-002": AuthorizationScope(
+        user_id="U-002",
+        role="Manager",
+        scope_type=ScopeType.cost_centre,
+        cost_centre="CC-TECH",
+    ),
+    "U-003": AuthorizationScope(
+        user_id="U-003",
+        role="Admin",
+        scope_type=ScopeType.organization,
+    ),
+}
 
-    This adapter does not authenticate or authorize anything. It only
-    consumes the trusted Auth/RBAC result and converts it to the compiler's
-    schema. The auth package is imported here so the Query Compiler remains
-    independently testable until the host app merges Auth/RBAC.
+
+def get_trusted_scope(
+    x_demo_user: str = Header(default="U-002", alias="X-Demo-User"),
+) -> AuthorizationScope:
+    """Resolve trusted scope without accepting authorization in the body.
+
+    In production the host application's Auth/RBAC dependency should provide
+    the scope. Until that module is integrated, the hackathon sandbox uses
+    the X-Demo-User header to select one of three fixed server-side personas.
+    The header selects a pre-defined scope; it cannot provide arbitrary role,
+    cost centre, organization, or user-scope values.
     """
-
     try:
         from auth import AuthorizationError, get_authorized_scope, get_current_user
-    except ImportError as exc:
-        raise HTTPException(
-            status_code=503,
-            detail="Auth/RBAC integration is not available yet.",
-        ) from exc
+    except (ImportError, AttributeError):
+        scope = DEMO_USERS.get(x_demo_user)
+        if scope is None:
+            raise HTTPException(
+                status_code=401,
+                detail="Unknown or missing demo user",
+            )
+        return scope
 
     user = get_current_user()
     if user is None:
@@ -53,7 +79,6 @@ def get_trusted_scope() -> AuthorizationScope:
         raise HTTPException(status_code=403, detail="Authorization denied.") from exc
 
     return AuthorizationScope.model_validate(trusted)
-
 
 @router.post("/compile", response_model=CompilerResponse)
 def compile_query_endpoint(
