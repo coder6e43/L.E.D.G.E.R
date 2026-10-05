@@ -25,6 +25,9 @@ import { SpendingCategories } from "./components/dashboard/SpendingCategories";
 import { FinancialInsights } from "./components/dashboard/FinancialInsights";
 import { RecentTransactions } from "./components/dashboard/RecentTransactions";
 import { TransactionDrawer } from "./components/dashboard/TransactionDrawer";
+
+import AdminPortal from "./components/admin/AdminPortal";
+
 import { accountFactors, categoryBase, examples, periodData, workspaceTransactions } from "./data/mockData";
 import { formatMoney, percentChange } from "./utils/formatters";
 import type { AccountKey, Analytics, CategoryDatum, DrillFilter, PeriodKey, ResultState, Theme, Transaction } from "./types";
@@ -296,11 +299,18 @@ function DashboardRoute() {
   return <Dashboard onLogout={() => navigate("/login")} theme={theme} onTheme={toggleTheme} />;
 }
 
+function AdminRoute() {
+  return <AdminPortal />;
+}
+
 const router = createBrowserRouter([
   { path: "/", Component: LandingPage },
   { path: "/login", element: <AuthRoute mode="login" /> },
   { path: "/signup", element: <AuthRoute mode="signup" /> },
   { path: "/dashboard", Component: DashboardRoute },
+
+  { path: "/admin", Component: AdminRoute },
+
   { path: "*", Component: LandingPage },
 ]);
 
