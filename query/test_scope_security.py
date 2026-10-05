@@ -204,3 +204,102 @@ def test_api_passes_trusted_scope_downstream():
     finally:
         api.compile_query = original
         app.dependency_overrides.clear()
+
+
+
+def test_client_cannot_supply_any_authorization_field():
+    forbidden_fields = [
+        "scope",
+        "role",
+        "cost_centre",
+        "organization",
+        "scope_type",
+        "scope_user_id",
+    ]
+
+    for field in forbidden_fields:
+        try:
+            CompileQueryRequest.model_validate(
+                {
+                    "prompt": "How much did I spend this month?",
+                    field: "attacker-controlled-value",
+                }
+            )
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(f"client field {field!r} must be rejected")
+
+
+def test_api_passes_employee_scope_unchanged():
+    app = FastAPI()
+    app.include_router(api.router)
+    trusted = employee_scope()
+    app.dependency_overrides[api.get_trusted_scope] = lambda: trusted
+
+    captured = {}
+
+    def fake_compile_query(prompt, scope, current_date=None):
+        captured["scope"] = scope
+        return {
+            "status": "SUCCESS",
+            "query": {
+                "intent": "sum_expenses",
+                "scope": scope.model_dump(),
+                "category": None,
+                "date_range_start": date(2026, 10, 1),
+                "date_range_end": date(2026, 10, 4),
+                "limit": None,
+                "currency": "INR",
+            },
+        }
+
+    original = api.compile_query
+    api.compile_query = fake_compile_query
+    try:
+        response = TestClient(app).post(
+            "/query/compile",
+            json={"prompt": "How much did I spend this month?"},
+        )
+        assert response.status_code == 200
+        assert captured["scope"] == trusted
+    finally:
+        api.compile_query = original
+        app.dependency_overrides.clear()
+
+
+def test_api_passes_admin_scope_unchanged():
+    app = FastAPI()
+    app.include_router(api.router)
+    trusted = admin_scope()
+    app.dependency_overrides[api.get_trusted_scope] = lambda: trusted
+
+    captured = {}
+
+    def fake_compile_query(prompt, scope, current_date=None):
+        captured["scope"] = scope
+        return {
+            "status": "SUCCESS",
+            "query": {
+                "intent": "sum_expenses",
+                "scope": scope.model_dump(),
+                "category": None,
+                "date_range_start": date(2026, 10, 1),
+                "date_range_end": date(2026, 10, 4),
+                "limit": None,
+                "currency": "INR",
+            },
+        }
+
+    original = api.compile_query
+    api.compile_query = fake_compile_query
+    try:
+        response = TestClient(app).post(
+            "/query/compile",
+            json={"prompt": "How much did I spend this month?"},
+        )
+        assert response.status_code == 200
+        assert captured["scope"] == trusted
+    finally:
+        api.compile_query = original
+        app.dependency_overrides.clear()
