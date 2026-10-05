@@ -33,3 +33,5 @@ export const createAdminUser = (body: { name: string; email: string; password: s
 export const updateAdminRole = (id: string, role: string) => request<AdminUser>(`/admin/users/${encodeURIComponent(id)}/role`, { method: "PATCH", body: JSON.stringify({ role }) });
 export const updateAdminCostCentre = (id: string, cost_centre: string) => request<AdminUser>(`/admin/users/${encodeURIComponent(id)}/cost-centre`, { method: "PATCH", body: JSON.stringify({ cost_centre }) });
 export const createExpense = (body: ExpenseInput) => request<{ expense_id: string; user_id: string; cost_centre: string; category: string; amount: number; currency: string; date: string; description: string }>("/expenses", { method: "POST", body: JSON.stringify(body) });
+export const getRecentAudits = (limit: number = 50) => request<any[]>(`/audit/recent?limit=${limit}`);
+export const getAuditById = (id: string) => request<any>(`/audit/${encodeURIComponent(id)}`);
