@@ -1124,7 +1124,17 @@ td small { font-size: 12px; }
 .expense-form, .admin-user-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; align-items: end; }
 .expense-description { grid-column: span 2; }
 .expense-form select, .admin-user-form select, .admin-filters select, .admin-table select { width: 100%; min-height: 40px; border: 1px solid var(--line-strong); border-radius: var(--radius-control); padding: 0 10px; background: var(--paper); color: var(--ink); }
-.expense-submit { min-height: 44px; }
+.expense-submit {
+  min-height: 44px;
+  background: var(--green) !important;
+  color: #ffffff !important;
+  border-color: var(--green) !important;
+  font-weight: 600;
+}
+.expense-submit:hover { background: var(--green-dark) !important; border-color: var(--green-dark) !important; }
+.expense-submit:disabled { opacity: .55; cursor: not-allowed; }
+[data-theme="dark"] .expense-submit { background: #0E6148 !important; border-color: #278468 !important; color: #ffffff !important; }
+[data-theme="dark"] .expense-submit:hover { background: #117457 !important; }
 .expense-success { color: var(--green); background: var(--green-soft); padding: 10px 14px; border-radius: 10px; }
 .admin-filters { display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 12px; margin: 14px 0; }
 .admin-table { width: 100%; border-collapse: collapse; text-align: left; }

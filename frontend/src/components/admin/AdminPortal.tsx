@@ -253,7 +253,7 @@ export function AdminPortal({ onIdentityChanged }: { onIdentityChanged?: () => P
     <div className="admin-portal" data-theme={theme}>
       <AdminSidebar page={page} setPage={setPage} open={navOpen} close={() => setNavOpen(false)} />
 
-      <div className="admin-main">
+      <div className="app-main">
         {/* Header Bar */}
         <header className="topbar">
           <div className="topbar-left">

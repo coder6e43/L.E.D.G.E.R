@@ -17,7 +17,7 @@ export function AddExpenseForm({ onCreated }: { onCreated: () => void }) {
       <label className="field"><span>Currency</span><select value={form.currency} onChange={(event) => change("currency", event.target.value)}>{["INR", "USD", "EUR"].map((item) => <option key={item}>{item}</option>)}</select></label>
       <label className="field"><span>Date</span><input type="date" required value={form.date} onChange={(event) => change("date", event.target.value)} /></label>
       <label className="field expense-description"><span>Description</span><input maxLength={500} value={form.description} onChange={(event) => change("description", event.target.value)} placeholder="Optional details" /></label>
-      <button className="primary expense-submit" type="submit" disabled={busy}>{busy ? "Saving…" : "Save expense"}</button>
+      <button className="button primary expense-submit" type="submit" disabled={busy}>{busy ? "Saving…" : "Save expense"}</button>
     </form>
     {error && <p role="alert" className="login-error">{error}</p>}{success && <p role="status" className="expense-success">{success}</p>}
   </section>;
