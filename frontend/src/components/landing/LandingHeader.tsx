@@ -93,7 +93,7 @@ export function LandingHeader() {
 
           <Button
             className="primary"
-            onClick={() => navigate("/signup")}
+            onClick={() => navigate("/login")}
           >
             Get Started
             <Icon name="arrow" size={16} />
