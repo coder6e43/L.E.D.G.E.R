@@ -3,6 +3,7 @@ import { BrowserRouter, Navigate, useLocation, useNavigate } from "react-router"
 import { Login } from "./components/auth/Login";
 import { Header } from "./components/dashboard/Header";
 import { QueryBox } from "./components/dashboard/QueryBox";
+import { FilterBar } from "./components/dashboard/FilterBar";
 import { ResultCard } from "./components/dashboard/ResultCard";
 import { ContextPanel } from "./components/dashboard/ContextPanel";
 import { CalculationPanel } from "./components/dashboard/CalculationPanel";
@@ -26,6 +27,8 @@ function SessionApp() {
   const [checking, setChecking] = useState(true);
   const [googleEnabled, setGoogleEnabled] = useState(false);
   const [prompt, setPrompt] = useState("");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
   const [result, setResult] = useState<QueryResult | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -47,19 +50,49 @@ function SessionApp() {
     if (user && location.pathname === "/analytics") void refreshAnalytics();
   }, [user, location.pathname, refreshAnalytics]);
 
+  function hasExplicitDateContext(question: string): boolean {
+  const text = question.toLowerCase();
+
+  return (
+    /\b20\d{2}\b/.test(text) ||
+    /\b(today|yesterday|this week|last week|this month|last month|this quarter|last quarter|year to date|ytd)\b/.test(text) ||
+    /\b(january|february|march|april|may|june|july|august|september|october|november|december)\b/.test(text) ||
+    /\b\d{4}-\d{2}-\d{2}\b/.test(text) ||
+    /\b\d{1,2}\/\d{1,2}\/\d{4}\b/.test(text)
+  );
+}
+
   async function ask(question = prompt) {
-    if (!question.trim() || busy) return;
-    setPrompt(question);
-    setError("");
-    setResult(null);
-    setBusy(true);
-    try {
-      setResult(await executeQuery(question));
-      if (location.pathname === "/analytics") navigate("/");
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "The query could not be completed.");
-    } finally { setBusy(false); }
+  if (!question.trim() || busy) return;
+
+  setPrompt(question);
+  setError("");
+  setResult(null);
+  setBusy(true);
+
+  const queryWithDateRange =
+    startDate &&
+    endDate &&
+    !hasExplicitDateContext(question)
+      ? `${question} between ${startDate} and ${endDate}`
+      : question;
+
+  try {
+    setResult(await executeQuery(queryWithDateRange));
+
+    if (location.pathname === "/analytics") {
+      navigate("/");
+    }
+  } catch (cause) {
+    setError(
+      cause instanceof Error
+        ? cause.message
+        : "The query could not be completed.",
+    );
+  } finally {
+    setBusy(false);
   }
+}
 
   async function signOut() {
     try { await logout(); }
@@ -104,6 +137,12 @@ function SessionApp() {
         <div><p className="section-kicker">L.E.D.G.E.R. · Evidence-backed finance</p><h1>Ask your financial data.</h1><p>Results are calculated from database records within your authenticated access scope.</p></div>
         <div className="workspace-status"><span className="status-dot" /> Connected to the secure workspace</div>
       </section>
+      <FilterBar
+  onDateRangeChange={(start, end) => {
+    setStartDate(start);
+    setEndDate(end);
+  }}
+/>
       <QueryBox query={prompt} setQuery={setPrompt} submit={() => void ask()} loading={busy} examples={examples} />
       {busy && <section className="panel" aria-live="polite" style={{ padding: 24, marginTop: 20 }}>Compiling your question and calculating from authorized records…</section>}
       {error && <section className="state-card state-error" role="alert" style={{ marginTop: 20 }}><div className="state-content"><p className="state-eyebrow">Request failed</p><h3>Unable to complete the query</h3><p>{error}</p></div></section>}
