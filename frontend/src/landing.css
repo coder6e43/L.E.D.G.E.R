@@ -3155,3 +3155,241 @@
   border: 0;
 
 }
+/* =========================================================
+   FINAL HACKATHON HERO FIX
+   ========================================================= */
+
+.landing-page .landing-hero {
+  display: block !important;
+  width: 100% !important;
+  max-width: none !important;
+  min-height: auto !important;
+  padding: 90px 0 120px !important;
+  overflow: hidden !important;
+}
+
+.landing-page .hero-centered-container {
+  width: min(1180px, calc(100% - 48px)) !important;
+  max-width: 1180px !important;
+  margin: 0 auto !important;
+
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  gap: 70px !important;
+}
+
+/* TEXT */
+
+.landing-page .hero-copy-centered {
+  width: 100% !important;
+  max-width: 900px !important;
+  margin: 0 auto !important;
+  text-align: center !important;
+}
+
+.landing-page .hero-copy-centered .landing-eyebrow {
+  display: flex !important;
+  justify-content: center !important;
+  width: 100% !important;
+}
+
+.landing-page .hero-copy-centered h1 {
+  width: 100% !important;
+  max-width: 900px !important;
+  margin: 24px auto !important;
+  font-size: clamp(52px, 7vw, 92px) !important;
+  line-height: 0.98 !important;
+  text-align: center !important;
+}
+
+.landing-page .hero-copy-centered .hero-description {
+  width: 100% !important;
+  max-width: 700px !important;
+  margin: 28px auto 0 !important;
+  text-align: center !important;
+  font-size: 17px !important;
+  line-height: 1.7 !important;
+}
+
+.landing-page .hero-copy-centered .hero-actions {
+  justify-content: center !important;
+  margin-top: 32px !important;
+}
+
+.landing-page .hero-copy-centered .hero-trust {
+  justify-content: center !important;
+}
+
+/* DASHBOARD */
+
+.landing-page .hero-visual-centered {
+  display: flex !important;
+  justify-content: center !important;
+  align-items: center !important;
+  width: 100% !important;
+  max-width: 1000px !important;
+  margin: 0 auto !important;
+}
+
+.landing-page .hero-visual-centered .landing-preview-wrap {
+  position: relative !important;
+  width: 100% !important;
+  max-width: 760px !important;
+  margin: 0 auto !important;
+  padding: 30px !important;
+}
+
+.landing-page .hero-visual-centered .landing-dashboard-preview {
+  width: 100% !important;
+  max-width: 760px !important;
+  margin: 0 auto !important;
+}
+
+/* Keep the decorative circles behind the dashboard */
+.landing-page .hero-visual-centered .preview-orbit {
+  pointer-events: none !important;
+}
+
+/* Mobile */
+
+@media (max-width: 700px) {
+  .landing-page .landing-hero {
+    padding: 65px 0 80px !important;
+  }
+
+  .landing-page .hero-centered-container {
+    width: calc(100% - 28px) !important;
+    gap: 45px !important;
+  }
+
+  .landing-page .hero-copy-centered h1 {
+    font-size: clamp(43px, 12vw, 64px) !important;
+  }
+
+  .landing-page .hero-visual-centered .landing-preview-wrap {
+    padding: 10px !important;
+  }
+
+  .landing-page .hero-copy-centered .hero-actions {
+    flex-direction: column !important;
+    width: 100% !important;
+  }
+
+  .landing-page .hero-copy-centered .landing-button {
+    width: 100% !important;
+  }
+}
+/* =========================================================
+   FINAL LANDING DARK MODE
+   ========================================================= */
+
+.landing-page.dark {
+  background: #071d16 !important;
+  color: #f3f8f5 !important;
+}
+
+.landing-page.dark .landing-header {
+  background: rgba(7, 29, 22, 0.94) !important;
+  border-bottom-color: #244238 !important;
+}
+
+.landing-page.dark .landing-header a,
+.landing-page.dark .login-link {
+  color: #dce9e3 !important;
+}
+
+.landing-page.dark .landing-hero,
+.landing-page.dark .landing-section,
+.landing-page.dark .landing-cta-section {
+  background: #071d16 !important;
+}
+
+.landing-page.dark .hero-description,
+.landing-page.dark .section-heading p,
+.landing-page.dark .about-card p,
+.landing-page.dark .feature-card p,
+.landing-page.dark .process-card p,
+.landing-page.dark .security-copy p {
+  color: #b7c9c1 !important;
+}
+
+.landing-page.dark .hero-copy-centered h1,
+.landing-page.dark .section-heading h2,
+.landing-page.dark .about-card h3,
+.landing-page.dark .feature-card h3,
+.landing-page.dark .process-card h3,
+.landing-page.dark .security-copy h2 {
+  color: #f3f8f5 !important;
+}
+
+.landing-page.dark .hero-visual-centered .landing-dashboard-preview {
+  background: #102a21 !important;
+  border-color: #315247 !important;
+  box-shadow:
+    0 35px 80px rgba(0, 0, 0, 0.35),
+    0 8px 25px rgba(0, 0, 0, 0.2) !important;
+}
+
+.landing-page.dark .preview-topbar,
+.landing-page.dark .preview-content,
+.landing-page.dark .preview-kpis > div,
+.landing-page.dark .preview-chart,
+.landing-page.dark .preview-breakdown,
+.landing-page.dark .preview-transactions {
+  background: #102a21 !important;
+  border-color: #315247 !important;
+  color: #e8f2ed !important;
+}
+
+.landing-page.dark .preview-kpis span,
+.landing-page.dark .preview-chart span,
+.landing-page.dark .preview-breakdown span,
+.landing-page.dark .preview-transactions span,
+.landing-page.dark .preview-transactions small {
+  color: #b7c9c1 !important;
+}
+
+.landing-page.dark .preview-kpis strong,
+.landing-page.dark .preview-breakdown b,
+.landing-page.dark .preview-transactions b {
+  color: #f3f8f5 !important;
+}
+
+.landing-page.dark .about-card,
+.landing-page.dark .feature-card,
+.landing-page.dark .process-card {
+  background: #102a21 !important;
+  border-color: #315247 !important;
+}
+
+.landing-page.dark .security-panel {
+  background: #102a21 !important;
+  border-color: #315247 !important;
+}
+
+.landing-page.dark .security-node {
+  background: #0b211a !important;
+  border-color: #315247 !important;
+}
+
+.landing-page.dark .landing-cta {
+  background: #0d3024 !important;
+  border-color: #315247 !important;
+}
+
+.landing-page.dark .landing-footer {
+  background: #04140f !important;
+  border-top-color: #244238 !important;
+}
+
+.landing-page.dark .landing-footer span,
+.landing-page.dark .landing-footer p {
+  color: #a9beb5 !important;
+}
+
+.landing-page.dark .landing-theme {
+  background: #102a21 !important;
+  border-color: #315247 !important;
+  color: #f3f8f5 !important;
+}
